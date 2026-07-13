@@ -282,7 +282,7 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 msg = 'Import failed. See console/logfile for details';
                 uialert(fig, msg, title, 'Icon', 'error')
 
-                exception = exceptions.CouldNotExportTYDEX();
+                exception = exceptions.CouldNotImportTYDEX();
                 exception = exception.addCause(cause);
                 throw(exception)
             end
@@ -579,12 +579,8 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 case optCancel
                     return
                 case optOverwrite
-                    app.setTyreModel(model)
-                    model = app.TyreModel;
                     model.saveTIR(file);
                 case optNew
-                    app.setTyreModel(model)
-                    model = app.TyreModel;
                     file = MagicFormulaTyreTool.dialogSaveTyreModel(model);
                     model.File = file;
             end
@@ -596,7 +592,7 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             title = 'Reset Tyre Model';
             options = {'Yes', 'Cancel'};
             selection = uiconfirm(app.UIFigure, message, title, ...
-                'Icon', 'warning');
+                'Icon', 'warning', 'Options', options);
             userCancel = strcmp(selection, options{end});
             if userCancel
                 return
@@ -608,7 +604,13 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             model = app.TyreModel;
             modelBackup = app.TyreModelBackup;
             
-            hasUnsavedChanges = model.Parameters ~= modelBackup.Parameters;
+            % Compare parameter values, not object identity: setTyreModel
+            % always copy()s, so the two handles are never the same object.
+            if ~isempty(model) && ~isempty(modelBackup)
+                hasUnsavedChanges = ~isequal(struct(model.Parameters), struct(modelBackup.Parameters));
+            else
+                hasUnsavedChanges = false;
+            end
             if hasUnsavedChanges
                 message = 'Tyre model has unsaved changes. Continue?';
                 title = 'Clear Tyre Model';
@@ -801,7 +803,7 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 'RowHeight', {'1x'}, ...
                 'ColumnWidth', {'1x'});
             app.TyreModelPanel = ui.TyreModelPanel(app.TyreModelGrid, ...
-                'LoadTyreModelDialogReqestedFcn', @app.onLoadModelRequested, ...
+                'LoadTyreModelDialogRequestedFcn', @app.onLoadModelRequested, ...
                 'TyreModelResetRequestedFcn', @app.onResetTyreModelRequested, ...
                 'TyreModelNewRequestedFcn', @app.onNewTyreModelRequested, ...
                 'TyreModelSaveRequested', @app.onSaveTyreModelRequested, ...

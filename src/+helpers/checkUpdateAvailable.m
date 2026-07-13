@@ -19,8 +19,11 @@ versionLatestSplit = split(versionLatest, '.');
 for i = 1:numel(versionCurrentSplit)
     v0 = str2double(versionCurrentSplit{i});
     v1 = str2double(versionLatestSplit{i});
-    available = v1 > v0;
-    if available
+    if v1 > v0
+        available = true;
+        return
+    elseif v0 > v1
+        % Current version is newer than latest release; no update available.
         return
     end
 end

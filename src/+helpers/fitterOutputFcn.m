@@ -15,11 +15,6 @@ arguments
     fitter magicformula.v61.Fitter
 end
 persistent fval0
-if isempty(fval0)
-    fval0 = optimValues.fval;
-elseif optimValues.iteration == 0
-    fval0 = optimValues.fval;
-end
 if dlg.CancelRequested
     stop = true;
 else
@@ -27,6 +22,9 @@ else
 end
 switch state
     case 'init'
+        % Reset baseline cost at the start of every new solve so stale
+        % values from a previous (possibly aborted) fitting run are cleared.
+        fval0 = optimValues.fval;
         message = 'Initializing Solver...';
     case 'iter'
         message = [...

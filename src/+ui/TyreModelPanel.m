@@ -39,7 +39,7 @@ classdef TyreModelPanel < matlab.ui.componentcontainer.ComponentContainer
         TyreModelResetRequested
         TyreModelApplyFittedRequested
         TyreModelStructToMatRequested
-        LoadTyreModelDialogReqested
+        LoadTyreModelDialogRequested
     end
     events (NotifyAccess = public)
         TyreModelChanged
@@ -75,7 +75,7 @@ classdef TyreModelPanel < matlab.ui.componentcontainer.ComponentContainer
             notify(obj, 'TyreModelNewRequested')
         end
         function onLoadModelRequested(obj, ~, ~)
-            notify(obj, 'LoadTyreModelDialogReqested')
+            notify(obj, 'LoadTyreModelDialogRequested')
         end
         function onResetModelRequested(obj, ~, ~)
             notify(obj, 'TyreModelResetRequested')

@@ -202,6 +202,7 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
                 constantValues = [measurement.Constant.Value];
                 excludeIdx = contains(constantNames, {'FNOMIN', 'NOMPRES'});
                 constantNames(excludeIdx) = [];
+                constantValues(excludeIdx) = [];  % keep in sync with constantNames
                 
                 for j = 1:numel(constantNames)
                     idx = strcmp(steadyStateNamesAll, constantNames{j});

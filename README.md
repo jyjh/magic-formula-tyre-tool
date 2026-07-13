@@ -140,5 +140,5 @@ comparison.
 
 ## Known Issues
 
-- Only Magic Formula version 6.1.2 (62) is supported.
+- Only Magic Formula version 6.1.2 (61) is supported.
 - The FSAE TTC parsers might not always work. You might have to create your own parser.

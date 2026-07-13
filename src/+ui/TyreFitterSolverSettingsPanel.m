@@ -43,11 +43,11 @@ classdef TyreFitterSolverSettingsPanel < matlab.ui.componentcontainer.ComponentC
                 s.OptimizerSettings.Algorithm = opts.Algorithm;
 
                 maxFunEval = obj.MaxFunEvalEditField.Value;
-                opts.MaxFunEvals = maxFunEval;
-                s.OptimizerSettings.MaxFunEvals = maxFunEval;
+                opts.MaxFunctionEvaluations = maxFunEval;
+                s.OptimizerSettings.MaxFunctionEvaluations = maxFunEval;
 
                 maxIter = obj.MaxIterEditField.Value;
-                opts.MaxIter =  maxIter;
+                opts.MaxIterations =  maxIter;
                 s.OptimizerSettings.MaxIterations = maxIter;
 
                 useParallel = logical(obj.ParpoolButton.Value);

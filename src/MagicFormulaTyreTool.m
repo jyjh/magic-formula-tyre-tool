@@ -10,6 +10,16 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
         TyreMeasurementsSelected tydex.Measurement
         TyreMeasurementsSelectionIndices logical
         TyreModelFitter magicformula.v61.Fitter
+
+        %Cache of the last downsampled measurement array used for fitting,
+        %keyed on a content signature of the source array and the downsample
+        %factor. The downsample pass walks every channel of every
+        %measurement, so it is worth skipping when neither the source data
+        %nor the factor changed between fit runs. See
+        %onStartFittingRequested and setTyreMeasurementData.
+        TyreMeasurementsSourceSignature double = -1
+        TyreMeasurementsDownsampledFactor double = NaN
+        TyreMeasurementsDownsampled tydex.Measurement = tydex.Measurement.empty
         
         %App settings, e.g. state of table filters
         Settings settings.AppSettings
@@ -443,7 +453,24 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             end
             
             downsampleFactor = app.Settings.Fitter.DownsampleFactor;
-            measurements = measurements.downsample(downsampleFactor, 0);
+            % Performance: downsample walks every channel of every
+            % measurement, so reuse the cached result when neither the
+            % source measurement content nor the factor changed since the
+            % last fit. The cache is invalidated whenever new data is
+            % loaded (see setTyreMeasurementData). The signature is a
+            % cheap fingerprint (count + per-measurement data length +
+            % class) rather than a full isequaln over all samples.
+            sourceSig = app.measurementsSignature(measurements);
+            if app.TyreMeasurementsSourceSignature == sourceSig ...
+                    && app.TyreMeasurementsDownsampledFactor == downsampleFactor ...
+                    && ~isempty(app.TyreMeasurementsDownsampled)
+                measurements = app.TyreMeasurementsDownsampled;
+            else
+                measurements = measurements.downsample(downsampleFactor, 0);
+                app.TyreMeasurementsSourceSignature = sourceSig;
+                app.TyreMeasurementsDownsampledFactor = downsampleFactor;
+                app.TyreMeasurementsDownsampled = measurements;
+            end
 
             fitter = app.TyreModelFitter;
             fitter.Parameters = params;
@@ -1055,14 +1082,49 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             fitter = app.TyreModelFitter;
             fitter.Measurements = measurements;
             flags = fitter.FitModeFlags;
-            
+
             app.TyreMeasurements = measurements;
             app.TyreMeasurementsSelected = tydex.Measurement.empty;
             app.TyreMeasurementsSelectionIndices = logical.empty;
-            
+
+            % Invalidate the downsample cache: the source data changed, so
+            % the next fit must rebuild the downsampled array.
+            app.TyreMeasurementsSourceSignature = -1;
+            app.TyreMeasurementsDownsampledFactor = NaN;
+            app.TyreMeasurementsDownsampled = tydex.Measurement.empty;
+
             e = events.TyreMeasurementsChanged(measurements, flags);
             notify(app.TyreDataPanel, 'MeasurementDataChanged', e);
             notify(app.TyreAnalysisPanel, 'TyreDataChanged', e);
+        end
+        function sig = measurementsSignature(app, measurements)
+            %MEASUREMENTSSIGNATURE Cheap content fingerprint of a
+            %   measurement array, used to key the downsample cache.
+            %   Combines the array length with the per-measurement data
+            %   length, a reduced numeric digest of every Measured channel,
+            %   and the Constant values. Reduces modulo 2^31-1 each step so
+            %   the signature never overflows to Inf. This is sufficient to
+            %   detect a change of source data without a full isequaln over
+            %   every sample. Mirrors magicformula.v61.Fitter.measurementsSignature.
+            n = numel(measurements);
+            sig = double(n);
+            for i = 1:n
+                m = measurements(i);
+                sig = mod(sig * 1000003 + double(numel(m.Measured)), 2147483647);
+                for j = 1:numel(m.Measured)
+                    data = m.Measured(j).Data;
+                    sig = mod(sig * 1000003 + double(numel(data)), 2147483647);
+                    if ~isempty(data)
+                        step = max(1, floor(numel(data)/8));
+                        sample = double(data(1:step:end));
+                        sig = mod(sig * 1000003 + sum(sample, 'omitnan'), 2147483647);
+                        sig = mod(sig * 1000003 + sum(abs(sample), 'omitnan'), 2147483647);
+                    end
+                end
+                for j = 1:numel(m.Constant)
+                    sig = mod(sig * 1000003 + double(m.Constant(j).Value), 2147483647);
+                end
+            end
         end
     end
     methods (Access = public)

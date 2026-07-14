@@ -489,7 +489,14 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                     'Details printed to logfile/console.'];
                 uialert(fig, msg, title, 'icon', icon)
             catch ME
-                paramsFitted = magicformula.v61.Parameters.empty;
+                % Fall back to the last successfully fitted values so that
+                % a single failed fit does not wipe the table. If no fit
+                % has ever succeeded, the payload stays empty.
+                if isempty(app.TyreModelFitted)
+                    paramsFitted = magicformula.v61.Parameters.empty;
+                else
+                    paramsFitted = app.TyreModelFitted.Parameters;
+                end
                 e = events.TyreModelFitterFinished(paramsFitted);
                 notify(app.TyreModelPanel, 'TyreModelFitterFinished', e)
                 
@@ -523,6 +530,10 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                         msg = sprintf(msg, cause.FitMode);
                     otherwise
                         msg = [msg 'Details printed to logfile/console.'];
+                end
+                if ~isempty(app.TyreModelFitted)
+                    msg = [msg newline() ...
+                        'Previously fitted values retained in the table.'];
                 end
                 uialert(fig, msg, title, 'icon', 'error')
                 rethrow(ME)

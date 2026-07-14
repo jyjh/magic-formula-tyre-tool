@@ -1,10 +1,11 @@
 {
     "Name": "MagicFormulaTyreTool",
-    "Version": "1.5.1",
+    "Version": "1.5.2",
     "Authors": [
-        "Tom Teasdale"
+        "Tom Teasdale",
+        "jyjh"
     ],
-    "Source": "github.com/teasit/magic-formula-tyre-tool",
+    "Source": "github.com/jyjh/magic-formula-tyre-tool",
     "FileExchange": "mathworks.com/matlabcentral/fileexchange/111375",
-	"CreatedWithRelease": "R2023b"
+	"CreatedWithRelease": "R2026a"
 }

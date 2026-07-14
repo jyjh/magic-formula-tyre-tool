@@ -130,8 +130,8 @@ classdef TyreFitterSolverSettingsPanel < matlab.ui.componentcontainer.ComponentC
             s = obj.Settings.Fitter;
             opts = obj.OptimizerOptions;
             obj.AlgorithmDropdown.Value = opts.Algorithm;
-            obj.MaxFunEvalEditField.Value = opts.MaxFunEvals;
-            obj.MaxIterEditField.Value = opts.MaxIter;
+            obj.MaxFunEvalEditField.Value = opts.MaxFunctionEvaluations;
+            obj.MaxIterEditField.Value = opts.MaxIterations;
             obj.ParpoolButton.Value = opts.UseParallel;
             obj.DownsampleFactorSpinner.Value = s.DownsampleFactor;
         end

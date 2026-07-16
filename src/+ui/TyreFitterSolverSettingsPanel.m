@@ -1,7 +1,7 @@
 classdef TyreFitterSolverSettingsPanel < matlab.ui.componentcontainer.ComponentContainer
     %FITTERSOLVERSETTINGSPANEL Panel to configure optimization settings of
     %fitter (fmincon).
-    
+
     events (HasCallbackProperty, NotifyAccess = protected)
         SettingsChanged
     end
@@ -12,6 +12,7 @@ classdef TyreFitterSolverSettingsPanel < matlab.ui.componentcontainer.ComponentC
         AlgorithmDropdown           matlab.ui.control.DropDown
         MaxFunEvalEditField         matlab.ui.control.NumericEditField
         MaxIterEditField            matlab.ui.control.NumericEditField
+        StepToleranceEditField      matlab.ui.control.NumericEditField
         ParpoolButton               matlab.ui.control.StateButton
         DownsampleFactorSpinner     matlab.ui.control.Spinner
     end
@@ -50,6 +51,10 @@ classdef TyreFitterSolverSettingsPanel < matlab.ui.componentcontainer.ComponentC
                 opts.MaxIterations =  maxIter;
                 s.OptimizerSettings.MaxIterations = maxIter;
 
+                stepTol = obj.StepToleranceEditField.Value;
+                opts.StepTolerance = stepTol;
+                s.OptimizerSettings.StepTolerance = stepTol;
+
                 useParallel = logical(obj.ParpoolButton.Value);
                 opts.UseParallel = useParallel;
                 s.OptimizerSettings.UseParallel = useParallel;
@@ -87,14 +92,13 @@ classdef TyreFitterSolverSettingsPanel < matlab.ui.componentcontainer.ComponentC
                 'FontName', s.Text.FontNamePanel, ...
                 'BorderType', 'none');
             obj.Grid = uigridlayout(obj.Panel, ...
-                'RowHeight', repmat({s.Layout.DefaultButtonHeight}, 1, 5), ...
+                'RowHeight', repmat({s.Layout.DefaultButtonHeight}, 1, 6), ...
                 'ColumnWidth', {'1x','fit'}, ...
                 'Padding', s.Layout.DefaultPadding, ...
                 'ColumnSpacing', s.Layout.DefaultColumnSpacing);
             
             algorithms = {
                 'interior-point'
-                'trust-region-reflective'
                 'sqp'
                 'active-set'
                 };
@@ -113,6 +117,11 @@ classdef TyreFitterSolverSettingsPanel < matlab.ui.componentcontainer.ComponentC
                 'ValueChangedFcn', @obj.onSettingsChanged);
             uilabel(obj.Grid, 'Text', 'MaxIter');
             
+            obj.StepToleranceEditField = uieditfield(obj.Grid, 'numeric', ...
+                'Limits', [0 inf], ...
+                'ValueChangedFcn', @obj.onSettingsChanged);
+            uilabel(obj.Grid, 'Text', 'StepTolerance');
+
             obj.ParpoolButton = uibutton(obj.Grid, 'state', ...
                 'Text', 'Enable', ...
                 'ValueChangedFcn', @obj.onSettingsChanged);
@@ -129,10 +138,23 @@ classdef TyreFitterSolverSettingsPanel < matlab.ui.componentcontainer.ComponentC
         function update(obj)
             s = obj.Settings.Fitter;
             opts = obj.OptimizerOptions;
-            obj.AlgorithmDropdown.Value = opts.Algorithm;
-            obj.MaxFunEvalEditField.Value = opts.MaxFunctionEvaluations;
-            obj.MaxIterEditField.Value = opts.MaxIterations;
-            obj.ParpoolButton.Value = opts.UseParallel;
+            if isfield(opts, 'Algorithm') || isprop(opts, 'Algorithm')
+                obj.AlgorithmDropdown.Value = opts.Algorithm;
+            end
+            if isfield(opts, 'MaxFunctionEvaluations') || isprop(opts, 'MaxFunctionEvaluations')
+                obj.MaxFunEvalEditField.Value = opts.MaxFunctionEvaluations;
+            end
+            if isfield(opts, 'MaxIterations') || isprop(opts, 'MaxIterations')
+                obj.MaxIterEditField.Value = opts.MaxIterations;
+            end
+            if isfield(opts, 'StepTolerance') || isprop(opts, 'StepTolerance')
+                obj.StepToleranceEditField.Value = opts.StepTolerance;
+            else
+                obj.StepToleranceEditField.Value = 1e-6;
+            end
+            if isfield(opts, 'UseParallel') || isprop(opts, 'UseParallel')
+                obj.ParpoolButton.Value = opts.UseParallel;
+            end
             obj.DownsampleFactorSpinner.Value = s.DownsampleFactor;
         end
     end

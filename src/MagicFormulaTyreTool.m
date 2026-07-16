@@ -11,13 +11,9 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
         TyreMeasurementsSelectionIndices logical
         TyreModelFitter magicformula.v61.Fitter
 
-        %Cache of the last downsampled measurement array used for fitting,
-        %keyed on a content signature of the source array and the downsample
-        %factor. The downsample pass walks every channel of every
-        %measurement, so it is worth skipping when neither the source data
-        %nor the factor changed between fit runs. See
-        %onStartFittingRequested and setTyreMeasurementData.
-        TyreMeasurementsSourceSignature double = -1
+        %Cache of the last downsampled measurement array used for fitting.
+        %It is invalidated explicitly when source data is assigned and keyed
+        %only by downsample factor between assignments.
         TyreMeasurementsDownsampledFactor double = NaN
         TyreMeasurementsDownsampled tydex.Measurement = tydex.Measurement.empty
         
@@ -263,32 +259,17 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
         function onImportMeasurementsRequested(app, ~, event)
             fig = app.UIFigure;
             title = 'Measurement Import';
-            msg = 'Importing measurements...'; %TODO: not indeterminate
-            dlg = uiprogressdlg(fig, ...
-                'Title', title,...
-                'Message', msg, ...
-                'Indeterminate','on', ...
-                'Cancelable', 'off');
             try
-                measurements = app.TyreMeasurements;
                 files = event.Files;
                 if isempty(files)
                     return
                 end
-                parser = event.Parser();
-                for i = 1:numel(files)
-                    file = files{i};
-                    measurement = parser.run(file);
-                    measurements = [measurements measurement];
-                end
-                app.setTyreMeasurementData(measurements)
-                model = app.TyreModel;
-                if ~isempty(model)
-                    nominalParams = app.extractNominalParametersFromMeasurements();
-                    app.dialogApplyParamsFromMeasurements(nominalParams)
-                end
+                parserHandle = event.Parser;
+                app.runMeasurementImport(files, parserHandle)
+                app.recordLastSessionMeasurementFiles(files)
+                app.Settings.LastSession.MeasurementParser = func2str(parserHandle);
+                uialert(fig, 'Import successful.', title, 'Icon', 'success')
             catch cause
-                close(dlg)
                 msg = 'Import failed. See console/logfile for details';
                 uialert(fig, msg, title, 'Icon', 'error')
 
@@ -296,9 +277,114 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 exception = exception.addCause(cause);
                 throw(exception)
             end
+        end
+        function runMeasurementImport(app, files, parser)
+            %RUNMEASUREMENTIMPORT Parse measurement files, load them, and
+            %apply derived nominal parameters to the current model. Shared
+            %by the interactive import path and the last-session reopen on
+            %startup so both behave identically.
+            arguments
+                app
+                files cell
+                parser function_handle
+            end
+            fig = app.UIFigure;
+            title = 'Measurement Import';
+            msg = 'Importing measurements...'; %TODO: not indeterminate
+            dlg = uiprogressdlg(fig, ...
+                'Title', title,...
+                'Message', msg, ...
+                'Indeterminate','on', ...
+                'Cancelable', 'off');
+            cleanup = onCleanup(@() close(dlg));
+            measurements = app.TyreMeasurements;
+            parserInstance = parser();
+            for i = 1:numel(files)
+                file = files{i};
+                measurement = parserInstance.run(file);
+                measurements = [measurements measurement];
+            end
+            app.setTyreMeasurementData(measurements)
+            model = app.TyreModel;
+            if ~isempty(model)
+                nominalParams = app.extractNominalParametersFromMeasurements();
+                app.dialogApplyParamsFromMeasurements(nominalParams)
+            end
             notify(app.TyreDataPanel, 'MeasurementDataImportFinished')
-            msg = 'Import successful.';
-            uialert(fig, msg, title, 'Icon', 'success')
+        end
+        function recordLastSessionMeasurementFiles(app, files)
+            %RECORDLASTSESSIONMEASUREMENTFILES Append the given paths to the
+            %cumulative last-session set (deduplicated, order preserved)
+            %and persist them so they can be re-imported on the next launch.
+            stored = app.getLastSessionMeasurementFiles();
+            combined = [stored; files(:)];
+            if ~isempty(combined)
+                [~, ia] = unique(combined, 'stable');
+                combined = combined(ia);
+            end
+            if isempty(combined)
+                joined = char.empty;
+            else
+                joined = strjoin(combined, newline);
+            end
+            app.Settings.LastSession.MeasurementFiles = joined;
+        end
+        function files = getLastSessionMeasurementFiles(app)
+            %GETLASTSESSIONMEASUREMENTFILES Return the remembered
+            %measurement file paths from the last session as a cell array.
+            s = app.Settings.LastSession.MeasurementFiles;
+            if isempty(s)
+                files = {};
+            else
+                files = cellstr(splitlines(s));
+            end
+        end
+        function promptLoadLastSessionMeasurementData(app)
+            %PROMPTLOADLASTSESSIONMEASUREMENTDATA Ask the user whether to
+            %re-import the measurement data files from the last session,
+            %and do so with the remembered parser on acceptance. No-op
+            %when nothing is remembered. Mirrors the last-tyre-model
+            %reopen: silent on success, uialert on failure.
+            files = app.getLastSessionMeasurementFiles();
+            if isempty(files)
+                return
+            end
+            fig = app.UIFigure;
+            title = 'Load Last Measurement Data';
+            n = numel(files);
+            if n == 1
+                noun = 'measurement file';
+            else
+                noun = 'measurement files';
+            end
+            parserStr = app.Settings.LastSession.MeasurementParser;
+            fileList = strjoin(files, newline);
+            if isempty(parserStr)
+                message = sprintf(['Do you want to re-import the ' ...
+                    'following %d %s from last session?\n\n%s'], ...
+                    n, noun, fileList);
+            else
+                message = sprintf(['Do you want to re-import the ' ...
+                    'following %d %s from last session using parser ' ...
+                    '''%s''?\n\n%s'], n, noun, parserStr, fileList);
+            end
+            selection = uiconfirm(fig, message, title, ...
+                'icon', 'info', 'Options', {'Yes', 'Cancel'});
+            if ~strcmp(selection, 'Yes')
+                return
+            end
+            if isempty(parserStr)
+                [~, parserHandles] = helpers.getParsers();
+                parserHandle = parserHandles{1};
+            else
+                parserHandle = str2func(parserStr);
+            end
+            try
+                app.runMeasurementImport(files, parserHandle)
+            catch
+                uialert(fig, 'Failed to load last measurement data!', ...
+                    title, 'Icon', 'error')
+            end
         end
         function onExportMeasurementsRequested(app, ~, ~)
             measurements = app.TyreMeasurements;
@@ -357,6 +443,8 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                     return
                 case optionClearAll
                     measurementsNew = tydex.Measurement.empty;
+                    app.Settings.LastSession.MeasurementFiles = char.empty;
+                    app.Settings.LastSession.MeasurementParser = char.empty;
                 case optionClearSelected
                     I = app.TyreMeasurementsSelectionIndices;
                     measurements = app.TyreMeasurements;
@@ -453,21 +541,14 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             end
             
             downsampleFactor = app.Settings.Fitter.DownsampleFactor;
-            % Performance: downsample walks every channel of every
-            % measurement, so reuse the cached result when neither the
-            % source measurement content nor the factor changed since the
-            % last fit. The cache is invalidated whenever new data is
-            % loaded (see setTyreMeasurementData). The signature is a
-            % cheap fingerprint (count + per-measurement data length +
-            % class) rather than a full isequaln over all samples.
-            sourceSig = app.measurementsSignature(measurements);
-            if app.TyreMeasurementsSourceSignature == sourceSig ...
-                    && app.TyreMeasurementsDownsampledFactor == downsampleFactor ...
+            % This cache is invalidated explicitly whenever source data is
+            % assigned. Avoid sampled fingerprints: edited data can have the
+            % same size and sampled values while requiring a fresh fit.
+            if app.TyreMeasurementsDownsampledFactor == downsampleFactor ...
                     && ~isempty(app.TyreMeasurementsDownsampled)
                 measurements = app.TyreMeasurementsDownsampled;
             else
                 measurements = measurements.downsample(downsampleFactor, 0);
-                app.TyreMeasurementsSourceSignature = sourceSig;
                 app.TyreMeasurementsDownsampledFactor = downsampleFactor;
                 app.TyreMeasurementsDownsampled = measurements;
             end
@@ -510,6 +591,14 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                     msg = 'Fitting process successful.';
                     icon = 'success';
                 end
+                results = fitter.FitResults;
+                if ~isempty(results)
+                    summary = arrayfun(@(r) sprintf( ...
+                        '%s: RMSE %.4g, exit %d, %d evals', ...
+                        char(r.FitMode),r.NormalizedRMSE,r.ExitFlag, ...
+                        r.FunctionEvaluations),results,'UniformOutput',false);
+                    msg = [msg newline() strjoin(summary,newline())];
+                end
                 msg = [msg newline() ...
                     'Parameters of last iteration written to table.' ...
                     newline() newline() ...
@@ -526,7 +615,8 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 end
                 e = events.TyreModelFitterFinished(paramsFitted);
                 notify(app.TyreModelPanel, 'TyreModelFitterFinished', e)
-                
+
+                cancelRequested = dlg.CancelRequested;
                 close(dlg)
                 
                 cause = ME.cause;
@@ -535,28 +625,37 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 end
                 
                 msg = ['Fitting process FAILED!' newline() newline()];
-                switch class(cause)
-                    case 'magicformula.exceptions.EmptyMeasurementChannel'
-                        msg = [msg 'Cause:' newline() ...
-                            'Loaded measurements do not have data ' ...
-                            'for channel ''%s''.'];
-                        msg = sprintf(msg, cause.Channel);
-                    case 'magicformula.exceptions.NoMeasurementForFitMode'
-                        msg = [msg 'Cause:' newline() ...
-                            'Loaded measurements do not contain ' ...
-                            'data for selected fitmode ''%s''. ' ...
-                            newline() newline() ...
-                            'Troubleshooting:' newline() ...
-                            'Note that to fit ''Fx0'' ' ...
-                            'you require data that includes slip ratio ' ...
-                            'sweeps. Fitting ''Fx'' also requires slip ' ...
-                            'angle to be present during those sweeps. ' ...
-                            'Similarly, fitting ''Fy0'' requires slip ' ...
-                            'angle sweeps and ''Fy'' also requires ' ...
-                            'those sweeps at interval-fixed slip ratios.'];
-                        msg = sprintf(msg, cause.FitMode);
-                    otherwise
-                        msg = [msg 'Details printed to logfile/console.'];
+                if cancelRequested
+                    msg = 'Fitting process aborted by user; fitted parameters were not applied.';
+                elseif any(strcmp(cause.identifier,{ ...
+                        'MagicFormulaTyreLibrary:InvalidMeasurementData', ...
+                        'MagicFormulaTyreLibrary:UnsupportedSolverAlgorithm', ...
+                        'MagicFormulaTyreLibrary:SolverDidNotConverge'}))
+                    msg = [msg 'Cause:' newline() cause.message];
+                else
+                    switch class(cause)
+                        case 'magicformula.exceptions.EmptyMeasurementChannel'
+                            msg = [msg 'Cause:' newline() ...
+                                'Loaded measurements do not have data ' ...
+                                'for channel ''%s''.'];
+                            msg = sprintf(msg, cause.Channel);
+                        case 'magicformula.exceptions.NoMeasurementForFitMode'
+                            msg = [msg 'Cause:' newline() ...
+                                'Loaded measurements do not contain ' ...
+                                'data for selected fitmode ''%s''. ' ...
+                                newline() newline() ...
+                                'Troubleshooting:' newline() ...
+                                'Note that to fit ''Fx0'' ' ...
+                                'you require data that includes slip ratio ' ...
+                                'sweeps. Fitting ''Fx'' also requires slip ' ...
+                                'angle to be present during those sweeps. ' ...
+                                'Similarly, fitting ''Fy0'' requires slip ' ...
+                                'angle sweeps and ''Fy'' also requires ' ...
+                                'those sweeps at interval-fixed slip ratios.'];
+                            msg = sprintf(msg, cause.FitMode);
+                        otherwise
+                            msg = [msg 'Details printed to logfile/console.'];
+                    end
                 end
                 if ~isempty(app.TyreModelFitted)
                     msg = [msg newline() ...
@@ -680,7 +779,7 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             if isempty(tyreModelFitted)
                 return
             end
-           
+
             fig = app.UIFigure;
             msg = ['Do you want to apply the fitted parameter values? ' ...
                 'Unsaved changes will be overwritten.'];
@@ -706,6 +805,34 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 case optCancel
                     return
             end
+        end
+        function onZeroParametersRequested(app, ~, ~)
+            tyreModel = app.TyreModel;
+            if isempty(tyreModel)
+                return
+            end
+            fig = app.UIFigure;
+            msg = ['Set all fittable parameter values of the current ' ...
+                'model to 0?\n\nUse ''Reset Model'' to revert to the ' ...
+                'saved state.'];
+            optZero = 'Zero Parameters';
+            optCancel = 'Cancel';
+            userSelection = uiconfirm(fig, msg, 'Zero Parameters', ...
+                'Options', {optZero, optCancel}, ...
+                'DefaultOption', optZero, ...
+                'CancelOption', optCancel);
+            if ~strcmp(userSelection, optZero)
+                return
+            end
+            params = tyreModel.Parameters;
+            names = fieldnames(params);
+            for i = 1:numel(names)
+                name = names{i};
+                if isa(params.(name), 'magicformula.ParameterFittable')
+                    params.(name).Value = 0;
+                end
+            end
+            app.setTyreModel(tyreModel, false)
         end
         function onTyreModelStructToMatRequested(app, ~, ~)
             filter = '.mat';
@@ -846,6 +973,7 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 'TyreModelNewRequestedFcn', @app.onNewTyreModelRequested, ...
                 'TyreModelSaveRequested', @app.onSaveTyreModelRequested, ...
                 'TyreModelApplyFittedRequested', @app.onApplyFittedTyreModelRequested, ...
+                'TyreModelZeroParametersRequestedFcn', @app.onZeroParametersRequested, ...
                 'TyreModelStructToMatRequested', @app.onTyreModelStructToMatRequested, ...
                 'TyreModelClearRequested', @app.onClearTyreModelRequested, ...
                 'FitterStartRequestedFcn', @app.onStartFittingRequested, ...
@@ -1051,7 +1179,11 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             
             measurements = tydex.Measurement.empty();
             app.setTyreMeasurementData(measurements);
-            
+
+            %Offer to re-import the measurement data files from the last
+            %session, mirroring the last-tyre-model reopen above.
+            app.promptLoadLastSessionMeasurementData()
+
             addlisteners(app)
         end
         function setTyreModel(app, model, overwriteBackup)
@@ -1089,42 +1221,12 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
 
             % Invalidate the downsample cache: the source data changed, so
             % the next fit must rebuild the downsampled array.
-            app.TyreMeasurementsSourceSignature = -1;
             app.TyreMeasurementsDownsampledFactor = NaN;
             app.TyreMeasurementsDownsampled = tydex.Measurement.empty;
 
             e = events.TyreMeasurementsChanged(measurements, flags);
             notify(app.TyreDataPanel, 'MeasurementDataChanged', e);
             notify(app.TyreAnalysisPanel, 'TyreDataChanged', e);
-        end
-        function sig = measurementsSignature(app, measurements)
-            %MEASUREMENTSSIGNATURE Cheap content fingerprint of a
-            %   measurement array, used to key the downsample cache.
-            %   Combines the array length with the per-measurement data
-            %   length, a reduced numeric digest of every Measured channel,
-            %   and the Constant values. Reduces modulo 2^31-1 each step so
-            %   the signature never overflows to Inf. This is sufficient to
-            %   detect a change of source data without a full isequaln over
-            %   every sample. Mirrors magicformula.v61.Fitter.measurementsSignature.
-            n = numel(measurements);
-            sig = double(n);
-            for i = 1:n
-                m = measurements(i);
-                sig = mod(sig * 1000003 + double(numel(m.Measured)), 2147483647);
-                for j = 1:numel(m.Measured)
-                    data = m.Measured(j).Data;
-                    sig = mod(sig * 1000003 + double(numel(data)), 2147483647);
-                    if ~isempty(data)
-                        step = max(1, floor(numel(data)/8));
-                        sample = double(data(1:step:end));
-                        sig = mod(sig * 1000003 + sum(sample, 'omitnan'), 2147483647);
-                        sig = mod(sig * 1000003 + sum(abs(sample), 'omitnan'), 2147483647);
-                    end
-                end
-                for j = 1:numel(m.Constant)
-                    sig = mod(sig * 1000003 + double(m.Constant(j).Value), 2147483647);
-                end
-            end
         end
     end
     methods (Access = public)

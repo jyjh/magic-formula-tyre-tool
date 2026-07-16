@@ -7,8 +7,8 @@ classdef TyreModelPanel < matlab.ui.componentcontainer.ComponentContainer
     end
     properties (Access = protected)
         Settings settings.AppSettings
-        ButtonsGridColumnWidthWithText = [repmat({110}, 1, 7) {'1x' 110}];
-        ButtonsGridColumnWidthOnlyIcon = [repmat({25}, 1, 7) {'1x' 25}];
+        ButtonsGridColumnWidthWithText = [repmat({110}, 1, 8) {'1x' 110}];
+        ButtonsGridColumnWidthOnlyIcon = [repmat({25}, 1, 8) {'1x' 25}];
         ButtonsTexts cell
     end
     properties (Access = ?ui.TyreModelPanelChart, Transient, NonCopyable)
@@ -22,6 +22,7 @@ classdef TyreModelPanel < matlab.ui.componentcontainer.ComponentContainer
         SaveModelButton         matlab.ui.control.Button
         ResetModelButton        matlab.ui.control.Button
         ApplyFittedButton       matlab.ui.control.Button
+        ZeroParametersButton    matlab.ui.control.Button
         ClearModelButton        matlab.ui.control.Button
         StructToMatButton       matlab.ui.control.Button
         FitterStateButton       matlab.ui.control.StateButton
@@ -38,6 +39,7 @@ classdef TyreModelPanel < matlab.ui.componentcontainer.ComponentContainer
         TyreModelSaveRequested
         TyreModelResetRequested
         TyreModelApplyFittedRequested
+        TyreModelZeroParametersRequested
         TyreModelStructToMatRequested
         LoadTyreModelDialogRequested
     end
@@ -107,6 +109,9 @@ classdef TyreModelPanel < matlab.ui.componentcontainer.ComponentContainer
             selection = obj.TyreParametersTable.SelectedParameterNames;
             e = events.TyreModelApplyFittedParametersRequested(selection);
             notify(obj, 'TyreModelApplyFittedRequested', e)
+        end
+        function onZeroParametersRequested(obj, ~, ~)
+            notify(obj, 'TyreModelZeroParametersRequested')
         end
         function onStructToMatRequested(obj, ~, ~)
             notify(obj, 'TyreModelStructToMatRequested')
@@ -187,6 +192,13 @@ classdef TyreModelPanel < matlab.ui.componentcontainer.ComponentContainer
                 'Icon', 'copy-solid.svg', ...
                 'Enable', false, ...
                 'ButtonPushedFcn', @obj.onApplyFittedRequested);
+            obj.ZeroParametersButton = uibutton(obj.ButtonsGrid, ...
+                'Text', 'Zero Parameters', ...
+                'Tooltip', ['Sets all fittable parameter values of the ' ...
+                    'current model to 0. Use ''Reset Model'' to revert.'], ...
+                'Icon', 'circle-xmark-solid.svg', ...
+                'Enable', false, ...
+                'ButtonPushedFcn', @obj.onZeroParametersRequested);
             obj.StructToMatButton = uibutton(obj.ButtonsGrid, ...
                 'Text', 'Struct to .mat', ...
                 'Tooltip', 'Exports model parameters as struct to .mat file.', ...
@@ -289,6 +301,7 @@ classdef TyreModelPanel < matlab.ui.componentcontainer.ComponentContainer
                 obj.SaveModelButton
                 obj.ClearModelButton
                 obj.ResetModelButton
+                obj.ZeroParametersButton
                 obj.StructToMatButton
                 ];
             hasModelLoaded = ~isempty(obj.Model);

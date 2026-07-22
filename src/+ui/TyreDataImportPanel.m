@@ -11,12 +11,14 @@ classdef TyreDataImportPanel < matlab.ui.componentcontainer.ComponentContainer
         Table             matlab.ui.control.Table 
         TableRemoveButton matlab.ui.control.Button
         ParserDropDown    matlab.ui.control.DropDown
+        SummaryTableField matlab.ui.control.EditField
     end
     properties (Access = public)
         Parser function_handle
         Parsers
         MeasurementFiles cell
         MeasurementFilesSelected cell
+        SummaryTableFile char
     end
     properties (Access = private)
         Settings settings.AppSettings
@@ -31,7 +33,8 @@ classdef TyreDataImportPanel < matlab.ui.componentcontainer.ComponentContainer
                 return
             end
             parser = obj.Parser;
-            e = events.MeasurementImportRequested(files, parser);
+            e = events.MeasurementImportRequested( ...
+                files,parser,obj.SummaryTableFile);
             notify(obj, 'DataImportRequested', e);
         end
         function onSelectDataFilesRequested(obj, ~, ~)
@@ -81,6 +84,18 @@ classdef TyreDataImportPanel < matlab.ui.componentcontainer.ComponentContainer
             dd.ItemsData = [{parserHandle} dd.ItemsData];
             obj.Parser = parserHandle;
         end
+        function onSelectSummaryTableRequested(obj, ~, ~)
+            filter = {'*.xlsx','Excel workbooks (*.xlsx)'};
+            prompt = 'Select FSAE TTC Summary Tables workbook';
+            [fileName,folder] = uigetfile(filter,prompt);
+            if folder == 0
+                return
+            end
+            obj.SummaryTableFile = fullfile(folder,fileName);
+        end
+        function onClearSummaryTableRequested(obj, ~, ~)
+            obj.SummaryTableFile = char.empty;
+        end
         function onParserDropdownChangedFcn(obj, ~, event)
             obj.Parser = event.Value;
         end
@@ -96,7 +111,7 @@ classdef TyreDataImportPanel < matlab.ui.componentcontainer.ComponentContainer
         function onRemoveDataFiles(obj, ~, ~)
             files = obj.MeasurementFiles;
             filesToRemove = obj.MeasurementFilesSelected;
-            I = strcmp(files, filesToRemove);
+            I = ismember(files, filesToRemove);
             files(I) = [];
             obj.MeasurementFiles = files;
             obj.MeasurementFilesSelected = [];
@@ -155,9 +170,11 @@ classdef TyreDataImportPanel < matlab.ui.componentcontainer.ComponentContainer
                 'FontWeight', s.Text.FontWeightPanel, ...
                 'BorderType', 'none');
             g = uigridlayout(p, ...
-                'RowHeight', {200, s.Layout.DefaultButtonHeight}, ...
+                'RowHeight', {200, s.Layout.DefaultButtonHeight, ...
+                    'fit',s.Layout.DefaultButtonHeight}, ...
                 'ColumnWidth', {'1x'}, ...
                 'Padding', s.Layout.DefaultPadding);
+            filesGrid = g;
             obj.Table = uitable(g, 'Data', {}, ...
                 'ColumnName', [], 'RowName', [], ...
                 'CellSelectionCallback', @obj.onMeasurementFilesSelected);
@@ -172,6 +189,19 @@ classdef TyreDataImportPanel < matlab.ui.componentcontainer.ComponentContainer
                 'ButtonPushedFcn', @obj.onRemoveDataFiles);
             uibutton(g, 'Text', 'Add...', ...
                 'ButtonPushedFcn', @obj.onSelectDataFilesRequested);
+
+            uilabel(filesGrid,'Text','FSAE TTC Summary Tables (recommended):');
+            metadataGrid = uigridlayout(filesGrid, ...
+                'ColumnWidth',{'1x',w,w}, ...
+                'RowHeight',{s.Layout.DefaultButtonHeight}, ...
+                'Padding',zeros(1,4), ...
+                'ColumnSpacing',s.Layout.DefaultColumnSpacing);
+            obj.SummaryTableField = uieditfield(metadataGrid,'text', ...
+                'Editable','off','Placeholder','No workbook selected');
+            uibutton(metadataGrid,'Text','Clear', ...
+                'ButtonPushedFcn',@obj.onClearSummaryTableRequested);
+            uibutton(metadataGrid,'Text','Select...', ...
+                'ButtonPushedFcn',@obj.onSelectSummaryTableRequested);
         end
         function setupImportButtonPanel(obj)
             s = obj.Settings;
@@ -204,6 +234,7 @@ classdef TyreDataImportPanel < matlab.ui.componentcontainer.ComponentContainer
             filesSelected = obj.MeasurementFilesSelected;
             obj.Table.Data = files;
             obj.ParserDropDown.Value = obj.Parser;
+            obj.SummaryTableField.Value = obj.SummaryTableFile;
             enable = matlab.lang.OnOffSwitchState(~isempty(filesSelected));
             obj.TableRemoveButton.Enable = enable;
         end

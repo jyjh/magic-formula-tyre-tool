@@ -205,7 +205,12 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
                 constantValues(excludeIdx) = [];  % keep in sync with constantNames
                 
                 for j = 1:numel(constantNames)
-                    idx = strcmp(steadyStateNamesAll, constantNames{j});
+                    idx = find(strcmp(steadyStateNamesAll, constantNames{j}), 1);
+                    % Unrecognized (e.g. custom) constants are not part of the
+                    % five-name steady-state set; skip them rather than fail.
+                    if isempty(idx)
+                        continue
+                    end
                     steadyStateValues{idx}(end+1,1) = {constantValues(j)};
                 end
             end
@@ -426,7 +431,7 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
                         xVal = rad2deg(INCLANGL);
                     case 'INFLPRES'
                         INFLPRES = vertcat(measurements.INFLPRES);
-                        xVal = INFLPRES;
+                        xVal = INFLPRES * 1E-5;
                     case 'FZW'
                         FZW = vertcat(measurements.FZW);
                         xVal = FZW;

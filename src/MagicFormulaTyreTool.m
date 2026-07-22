@@ -87,7 +87,36 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 params = [];
                 return
             end
-            params = measurements(end).ModelParameters;
+            % Derive one deterministic reference from the complete imported
+            % set. The previous implementation used the final file, making
+            % the TIR parameterization depend on file-selection order.
+            params = measurements(1).ModelParameters;
+            for i = 1:numel(params)
+                name = params(i).Name;
+                values = [];
+                for j = 1:numel(measurements)
+                    names = {measurements(j).ModelParameters.Name};
+                    k = find(strcmp(names,name),1);
+                    if ~isempty(k)
+                        value = measurements(j).ModelParameters(k).Value;
+                        if isnumeric(value) && isscalar(value) && isfinite(value)
+                            values(end+1) = value; %#ok<AGROW>
+                        end
+                    end
+                end
+                if isempty(values)
+                    continue
+                end
+                switch name
+                    case 'FNOMIN'
+                        % Largest load common to all imported run envelopes.
+                        params(i).Value = min(values);
+                    case 'NOMPRES'
+                        params(i).Value = median(values);
+                    otherwise
+                        params(i).Value = median(values);
+                end
+            end
         end
         function dialogApplyParamsFromMeasurements(app, params)
             fig = app.UIFigure;
@@ -265,12 +294,39 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                     return
                 end
                 parserHandle = event.Parser;
-                app.runMeasurementImport(files, parserHandle)
+                summaryTableFile = event.SummaryTableFile;
+                importResult = app.runMeasurementImport( ...
+                    files,parserHandle,summaryTableFile);
                 app.recordLastSessionMeasurementFiles(files)
                 app.Settings.LastSession.MeasurementParser = func2str(parserHandle);
-                uialert(fig, 'Import successful.', title, 'Icon', 'success')
+                app.Settings.LastSession.MeasurementSummaryTableFile = ...
+                    summaryTableFile;
+                if isempty(summaryTableFile)
+                    msg = sprintf(['Import successful.\n\n' ...
+                        'Source files: %d\nMeasurement segments: %d'], ...
+                        importResult.SourceFileCount, ...
+                        importResult.MeasurementCount);
+                else
+                    [~,summaryName,summaryExt] = fileparts(summaryTableFile);
+                    msg = sprintf(['Import successful.\n\n' ...
+                        'Summary Tables workbook applied:\n%s%s\n\n' ...
+                        'Matched runs: %d of %d\n' ...
+                        'Measurement segments: %d'], ...
+                        summaryName,summaryExt, ...
+                        importResult.SummaryMatchedRunCount, ...
+                        importResult.SourceFileCount, ...
+                        importResult.MeasurementCount);
+                end
+                uialert(fig, msg, title, 'Icon', 'success')
             catch cause
-                msg = 'Import failed. See console/logfile for details';
+                if exist('summaryTableFile','var') && ~isempty(summaryTableFile)
+                    [~,summaryName,summaryExt] = fileparts(summaryTableFile);
+                    msg = sprintf(['Import failed while applying Summary ' ...
+                        'Tables workbook %s%s.\n\n%s'], ...
+                        summaryName,summaryExt,cause.message);
+                else
+                    msg = sprintf('Import failed.\n\n%s',cause.message);
+                end
                 uialert(fig, msg, title, 'Icon', 'error')
 
                 exception = exceptions.CouldNotImportTYDEX();
@@ -278,7 +334,7 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 throw(exception)
             end
         end
-        function runMeasurementImport(app, files, parser)
+        function result = runMeasurementImport(app, files, parser, summaryTableFile)
             %RUNMEASUREMENTIMPORT Parse measurement files, load them, and
             %apply derived nominal parameters to the current model. Shared
             %by the interactive import path and the last-session reopen on
@@ -287,10 +343,17 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 app
                 files cell
                 parser function_handle
+                summaryTableFile char = char.empty
             end
             fig = app.UIFigure;
             title = 'Measurement Import';
-            msg = 'Importing measurements...'; %TODO: not indeterminate
+            if isempty(summaryTableFile)
+                msg = 'Importing measurements...'; %TODO: not indeterminate
+            else
+                [~,summaryName,summaryExt] = fileparts(summaryTableFile);
+                msg = sprintf('Applying Summary Tables workbook %s%s...', ...
+                    summaryName,summaryExt);
+            end
             dlg = uiprogressdlg(fig, ...
                 'Title', title,...
                 'Message', msg, ...
@@ -298,10 +361,18 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 'Cancelable', 'off');
             cleanup = onCleanup(@() close(dlg));
             measurements = app.TyreMeasurements;
+            importedMeasurementCount = 0;
             parserInstance = parser();
             for i = 1:numel(files)
                 file = files{i};
-                measurement = parserInstance.run(file);
+                if isempty(summaryTableFile)
+                    measurement = parserInstance.run(file);
+                else
+                    measurement = parserInstance.run(file, ...
+                        'SummaryTableFile',summaryTableFile);
+                end
+                importedMeasurementCount = importedMeasurementCount + ...
+                    numel(measurement);
                 measurements = [measurements measurement];
             end
             app.setTyreMeasurementData(measurements)
@@ -311,6 +382,11 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 app.dialogApplyParamsFromMeasurements(nominalParams)
             end
             notify(app.TyreDataPanel, 'MeasurementDataImportFinished')
+            result = struct( ...
+                'SourceFileCount',numel(files), ...
+                'MeasurementCount',importedMeasurementCount, ...
+                'SummaryMatchedRunCount', ...
+                numel(files) * ~isempty(summaryTableFile));
         end
         function recordLastSessionMeasurementFiles(app, files)
             %RECORDLASTSESSIONMEASUREMENTFILES Append the given paths to the
@@ -380,7 +456,15 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 parserHandle = str2func(parserStr);
             end
             try
-                app.runMeasurementImport(files, parserHandle)
+                summaryTableFile = ...
+                    app.Settings.LastSession.MeasurementSummaryTableFile;
+                if ~isempty(summaryTableFile) && ~isfile(summaryTableFile)
+                    warning('MagicFormulaTyreTool:MissingSummaryWorkbook', ...
+                        ['The remembered Summary Tables workbook no longer ' ...
+                        'exists; measurements will be imported without it.'])
+                    summaryTableFile = char.empty;
+                end
+                app.runMeasurementImport(files,parserHandle,summaryTableFile)
             catch
                 uialert(fig, 'Failed to load last measurement data!', ...
                     title, 'Icon', 'error')
@@ -557,6 +641,9 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             fitter.Parameters = params;
             fitter.Measurements = measurements;
             fitter.FitModes = fitmodes;
+            % Preserve successful independent stages when a later mode is
+            % rejected; dependency-aware skipping prevents invalid chaining.
+            fitter.ContinueOnRejectedFit = true;
             
             msg = 'Starting Fitter...';
             dlg = uiprogressdlg(fig, ...
@@ -584,18 +671,24 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 cancelByUser = dlg.CancelRequested;
                 close(dlg)
                 
+                results = fitter.FitResults;
+                rejected = ~isempty(results) && any(~[results.Accepted]);
                 if cancelByUser
                     msg = 'Fitting process aborted by user.';
                     icon = 'info';
+                elseif rejected
+                    msg = ['Fitting completed with rejected/skipped modes. ' ...
+                        'Only accepted parameters were applied.'];
+                    icon = 'warning';
                 else
                     msg = 'Fitting process successful.';
                     icon = 'success';
                 end
-                results = fitter.FitResults;
                 if ~isempty(results)
                     summary = arrayfun(@(r) sprintf( ...
-                        '%s: RMSE %.4g, exit %d, %d evals', ...
-                        char(r.FitMode),r.NormalizedRMSE,r.ExitFlag, ...
+                        '%s: accepted=%d, NRMSE %.4g, physical RMSE %.4g, exit %d, %d evals', ...
+                        char(r.FitMode),r.Accepted, ...
+                        r.NormalizedRMSE,r.PhysicalRMSE,r.ExitFlag, ...
                         r.FunctionEvaluations),results,'UniformOutput',false);
                     msg = [msg newline() strjoin(summary,newline())];
                 end

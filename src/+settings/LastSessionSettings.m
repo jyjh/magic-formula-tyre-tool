@@ -7,6 +7,8 @@ classdef LastSessionSettings < settings.AbstractSettings
         %Name of the parser class last used to import measurement files;
         %'' when none is remembered.
         MeasurementParser char
+        %Optional companion FSAE TTC Summary Tables workbook.
+        MeasurementSummaryTableFile char
     end
     methods
         function obj = LastSessionSettings()

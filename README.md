@@ -104,8 +104,14 @@ flowchart TD
 To import test-bench data, you might have to create a custom parser which takes and
 arbitrary input file and converts it into an array of `tydex.Measurement` objects. Each
 measurement object contains data for only one steady-state condition. This means that only
-one variable is *sweeped* (= *transient*). In case of Formula SAE Tire Test Consortium Data,
-two parsers for *Cornering* and *Drive/Brake* MAT files in SI-units are already available.
+one variable is *sweeped* (= *transient*). The Formula SAE Tire Test Consortium parser
+supports both *Cornering* and *Drive/Brake* MAT files in SI units.
+
+For FSAE TTC releases, select the release's `Summary Tables.xlsx` workbook in the
+additional import field. It supplies the commanded schedules, run-quality comments,
+speed blocks, and physical tyre serial number that are not encoded reliably in the MAT
+file. With this workbook the importer uses scheduled setpoints and contiguous test
+blocks; without it, it falls back to legacy histogram-based condition detection.
 
 ![Animation Data Import](assets/img/App_Screenshot_DataImport.gif)
 
@@ -141,4 +147,5 @@ comparison.
 ## Known Issues
 
 - Only Magic Formula version 6.1.2 (61) is supported.
-- The FSAE TTC parsers might not always work. You might have to create your own parser.
+- MAT-only FSAE TTC import cannot recover run schedules, quality flags, or specimen
+  identity. Use the matching Summary Tables workbook whenever it is available.

@@ -8,10 +8,12 @@ classdef TyreDataImportPanel < matlab.ui.componentcontainer.ComponentContainer
     end
     properties (Access = private, Transient, NonCopyable)
         Grid              matlab.ui.container.GridLayout
-        Table             matlab.ui.control.Table 
+        Table             matlab.ui.control.Table
         TableRemoveButton matlab.ui.control.Button
         ParserDropDown    matlab.ui.control.DropDown
         SummaryTableField matlab.ui.control.EditField
+        SummaryTableHint  ui.HelpHint
+        IgnoreC6CheckBox  matlab.ui.control.CheckBox
     end
     properties (Access = public)
         Parser function_handle
@@ -19,6 +21,7 @@ classdef TyreDataImportPanel < matlab.ui.componentcontainer.ComponentContainer
         MeasurementFiles cell
         MeasurementFilesSelected cell
         SummaryTableFile char
+        IgnoreC6MechanicalLimitBuckets logical = false
     end
     properties (Access = private)
         Settings settings.AppSettings
@@ -34,7 +37,8 @@ classdef TyreDataImportPanel < matlab.ui.componentcontainer.ComponentContainer
             end
             parser = obj.Parser;
             e = events.MeasurementImportRequested( ...
-                files,parser,obj.SummaryTableFile);
+                files,parser,obj.SummaryTableFile, ...
+                obj.IgnoreC6MechanicalLimitBuckets);
             notify(obj, 'DataImportRequested', e);
         end
         function onSelectDataFilesRequested(obj, ~, ~)
@@ -95,6 +99,9 @@ classdef TyreDataImportPanel < matlab.ui.componentcontainer.ComponentContainer
         end
         function onClearSummaryTableRequested(obj, ~, ~)
             obj.SummaryTableFile = char.empty;
+        end
+        function onIgnoreC6Changed(obj, ~, event)
+            obj.IgnoreC6MechanicalLimitBuckets = event.Value;
         end
         function onParserDropdownChangedFcn(obj, ~, event)
             obj.Parser = event.Value;
@@ -171,7 +178,7 @@ classdef TyreDataImportPanel < matlab.ui.componentcontainer.ComponentContainer
                 'BorderType', 'none');
             g = uigridlayout(p, ...
                 'RowHeight', {200, s.Layout.DefaultButtonHeight, ...
-                    'fit',s.Layout.DefaultButtonHeight}, ...
+                    'fit',s.Layout.DefaultButtonHeight,'fit'}, ...
                 'ColumnWidth', {'1x'}, ...
                 'Padding', s.Layout.DefaultPadding);
             filesGrid = g;
@@ -190,7 +197,19 @@ classdef TyreDataImportPanel < matlab.ui.componentcontainer.ComponentContainer
             uibutton(g, 'Text', 'Add...', ...
                 'ButtonPushedFcn', @obj.onSelectDataFilesRequested);
 
-            uilabel(filesGrid,'Text','FSAE TTC Summary Tables (recommended):');
+            summaryHintGrid = uigridlayout(filesGrid, ...
+                'ColumnWidth',{'1x',s.Layout.DefaultButtonWidthOnlyIcon}, ...
+                'RowHeight',{s.Layout.DefaultButtonHeight}, ...
+                'Padding',zeros(1,4), ...
+                'ColumnSpacing',0);
+            uilabel(summaryHintGrid,'Text','FSAE TTC Summary Tables (recommended):');
+            obj.SummaryTableHint = ui.HelpHint(summaryHintGrid, ...
+                'Tooltip', ['The Summary Tables workbook supplied with ' ...
+                    'each FSAE TTC test campaign. Selecting it enriches ' ...
+                    'each run with run-condition metadata (pressure, ' ...
+                    'load, camber, ...) so imported measurements carry ' ...
+                    'their nominal parameters.'], ...
+                'ClickedFcn', @(~,~) web('https://github.com/jyjh/magic-formula-tyre-tool'));
             metadataGrid = uigridlayout(filesGrid, ...
                 'ColumnWidth',{'1x',w,w}, ...
                 'RowHeight',{s.Layout.DefaultButtonHeight}, ...
@@ -202,6 +221,13 @@ classdef TyreDataImportPanel < matlab.ui.componentcontainer.ComponentContainer
                 'ButtonPushedFcn',@obj.onClearSummaryTableRequested);
             uibutton(metadataGrid,'Text','Select...', ...
                 'ButtonPushedFcn',@obj.onSelectSummaryTableRequested);
+            obj.IgnoreC6CheckBox = uicheckbox(filesGrid, ...
+                'Text','Ignore incomplete C6 mechanical-limit buckets', ...
+                'Value',obj.IgnoreC6MechanicalLimitBuckets, ...
+                'Tooltip',['For C6-flagged runs, exclude only condition ' ...
+                'buckets that do not complete both directions of the ' ...
+                'scheduled slip sweep.'], ...
+                'ValueChangedFcn',@obj.onIgnoreC6Changed);
         end
         function setupImportButtonPanel(obj)
             s = obj.Settings;
@@ -223,6 +249,8 @@ classdef TyreDataImportPanel < matlab.ui.componentcontainer.ComponentContainer
         function setup(obj)
             obj.Position = [0 0 300 400];
             obj.Settings = settings.AppSettings();
+            obj.IgnoreC6MechanicalLimitBuckets = ...
+                obj.Settings.LastSession.IgnoreC6MechanicalLimitBuckets;
             setupSidebarPanel(obj)
             setupFilesPanel(obj)
             setupParserPanel(obj)
@@ -235,6 +263,10 @@ classdef TyreDataImportPanel < matlab.ui.componentcontainer.ComponentContainer
             obj.Table.Data = files;
             obj.ParserDropDown.Value = obj.Parser;
             obj.SummaryTableField.Value = obj.SummaryTableFile;
+            obj.IgnoreC6CheckBox.Value = ...
+                obj.IgnoreC6MechanicalLimitBuckets;
+            obj.IgnoreC6CheckBox.Enable = matlab.lang.OnOffSwitchState( ...
+                ~isempty(obj.SummaryTableFile));
             enable = matlab.lang.OnOffSwitchState(~isempty(filesSelected));
             obj.TableRemoveButton.Enable = enable;
         end

@@ -28,19 +28,10 @@ classdef TyreFitterFittingModesPanel < matlab.ui.componentcontainer.ComponentCon
             fitmode = fitmodes(I);
             
             enable = event.Value;
-            if enable
-                fitModesSelected = obj.FitModes;
-                fitModesSelected = [fitModesSelected fitmode];
-                fitModesSelected = unique(fitModesSelected);
-                obj.FitModes = fitModesSelected;
-            else
-                fitModesSelected = obj.FitModes;
-                I = fitModesSelected == fitmode;
-                fitModesSelected(I) = [];
-                obj.FitModes = fitModesSelected;
-            end
-            
-            obj.Settings.Fitter.FitModes = fitModesSelected;
+            obj.FitModes = helpers.toggleFitMode(obj.FitModes, fitmode, ...
+                enable);
+
+            obj.Settings.Fitter.FitModes = obj.FitModes;
             
             e = events.FittingModesChangedEventData(obj.FitModes);
             notify(obj, 'SelectionChanged', e)
@@ -73,9 +64,13 @@ classdef TyreFitterFittingModesPanel < matlab.ui.componentcontainer.ComponentCon
                     'Text', fitmodes{i}, ...
                     'ValueChangedFcn', @obj.onCheckboxValueChanged);
                 if any(strcmp(fitmodes{i}, 'Fz'))
-                    % todo: enable these fitmodes after they are
-                    % implemented in the Fitter class.
+                    % The vertical-load (Fz) fit modes are not yet
+                    % implemented in the Fitter class, so they are shown
+                    % disabled rather than hidden.
                     cb.Enable = false;
+                    cb.Tooltip = ['Vertical-load (Fz) fit modes are not ' ...
+                        'supported yet. They will be enabled once the ' ...
+                        'Fitter implements them.'];
                 end
                 obj.Checkboxes = [obj.Checkboxes cb];
             end

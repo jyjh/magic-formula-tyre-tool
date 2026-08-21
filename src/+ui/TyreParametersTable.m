@@ -73,7 +73,7 @@ classdef TyreParametersTable < matlab.ui.componentcontainer.ComponentContainer
         end
         function onCellEdit(obj, source, event)
             prevData = event.PreviousData;
-            
+
             cellAcceptsNoUserInput = strcmp(prevData, '-');
             if cellAcceptsNoUserInput
                 tbl = source;
@@ -82,41 +82,35 @@ classdef TyreParametersTable < matlab.ui.componentcontainer.ComponentContainer
                 tbl.Data{row,col} = prevData;
                 return
             end
-            
+
             data = obj.Table.Data;
             model = obj.Model;
             col = event.Indices(2);
+            propName = '';
+            switch col
+                case obj.ColumnValue
+                    propName = 'Value';
+                case obj.ColumnFixed
+                    propName = 'Fixed';
+                case obj.ColumnMin
+                    propName = 'Min';
+                case obj.ColumnMax
+                    propName = 'Max';
+            end
+            if isempty(propName)
+                return
+            end
+            row = event.Indices(1);
+            newData = event.NewData;
+            if strcmp(propName, 'Fixed')
+                newData = logical(newData);
+            elseif ~isnan(str2double(newData))
+                newData = str2double(newData);
+            end
+            parameterName = char(data(row, obj.ColumnParameter));
+            model.Parameters.(parameterName).(propName) = newData;
             if col == obj.ColumnValue
-                row = event.Indices(1);
-                parameterValue = event.NewData;
-                if ~isnan(str2double(parameterValue))
-                    parameterValue = str2double(parameterValue);
-                end
-                parameterName = char(data(row, obj.ColumnParameter));
-                model.Parameters.(parameterName).Value = parameterValue;
                 notify(obj, 'TyreModelEdited')
-            elseif col == obj.ColumnFixed
-                row = event.Indices(1);
-                parameterFixed = event.NewData;
-                parameterFixed = logical(parameterFixed);
-                parameterName = char(data(row, obj.ColumnParameter));
-                model.Parameters.(parameterName).Fixed = parameterFixed;
-            elseif col == obj.ColumnMin
-                row = event.Indices(1);
-                parameterMin = event.NewData;
-                if ~isnan(str2double(parameterMin))
-                    parameterMin = str2double(parameterMin);
-                end
-                parameterName = char(data(row, obj.ColumnParameter));
-                model.Parameters.(parameterName).Min = parameterMin;
-            elseif col == obj.ColumnMax
-                row = event.Indices(1);
-                parameterMax = event.NewData;
-                if ~isnan(str2double(parameterMax))
-                    parameterMax = str2double(parameterMax);
-                end
-                parameterName = char(data(row, obj.ColumnParameter));
-                model.Parameters.(parameterName).Max = parameterMax;
             end
         end
         function onCellSelection(obj, ~, event)
@@ -156,88 +150,67 @@ classdef TyreParametersTable < matlab.ui.componentcontainer.ComponentContainer
             indices = [rows cols];
             
             if isempty(indices)
-                i = 1;
                 obj.SearchIndices = indices;
-                obj.SearchIndicesIterator = i;
-                e = events.SearchResultsAvailable(indices, i);
+                obj.SearchIndicesIterator = 1;
+                e = events.SearchResultsAvailable(indices);
                 notify(obj, 'SearchResultsAvailable', e)
                 return
             end
-            
+
             i = 1;
             row = indices(i,1);
             col = indices(i,2);
-                
-            styleMatches = uistyle('BackgroundColor', '#FFFFE0');
+
+            styleMatches = uistyle('BackgroundColor', obj.Settings.Theme.SearchMatchHighlight);
             removeStyleFromTable(obj, obj.SearchMatchesStyle)
             addStyle(tbl, styleMatches, 'cell', indices)
             obj.SearchMatchesStyle = styleMatches;
-            
-            styleSelected = uistyle('BackgroundColor', '#6495ED');
+
+            styleSelected = uistyle('BackgroundColor', obj.Settings.Theme.SearchMatchSelected);
             removeStyleFromTable(obj, obj.SearchSeletedStyle)
             addStyle(tbl, styleSelected, 'cell', [row col])
             obj.SearchSeletedStyle = styleSelected;
-            
+
             scroll(obj.Table, 'cell', [row, col])
-            
+
             obj.SearchIndices = indices;
             obj.SearchIndicesIterator = i;
-            
-            e = events.SearchResultsAvailable(indices, i);
+
+            e = events.SearchResultsAvailable(indices);
             notify(obj, 'SearchResultsAvailable', e)
         end
         function onSearchNextRequested(obj, ~, ~)
-            tbl = obj.Table;
-            
-            indices = obj.SearchIndices;
-            if isempty(indices)
-                return
-            end
-            i = obj.SearchIndicesIterator;
-            i = i + 1;
-            if i > size(indices, 1)
-                i = 1;
-            end
-            row = indices(i,1);
-            col = indices(i,2);
-            
-            styleSelected = uistyle('BackgroundColor', '#6495ED');
-            removeStyleFromTable(obj, obj.SearchSeletedStyle)
-            addStyle(tbl, styleSelected, 'cell', [row col])
-            obj.SearchSeletedStyle = styleSelected;
-            
-            scroll(tbl, 'cell', [row, col])
-            
-            obj.SearchIndicesIterator = i;
-            
-            e = events.SearchResultsAvailable(indices, i);
-            notify(obj, 'SearchResultsAvailable', e)
+            stepSearch(obj, +1)
         end
         function onSearchPrevRequested(obj, ~, ~)
+            stepSearch(obj, -1)
+        end
+        function stepSearch(obj, direction)
             tbl = obj.Table;
-            
+
             indices = obj.SearchIndices;
             if isempty(indices)
                 return
             end
-            i = obj.SearchIndicesIterator;
-            i = i - 1;
-            if i < 1
+            i = obj.SearchIndicesIterator + direction;
+            if i > size(indices, 1)
+                i = 1;
+            elseif i < 1
                 i = size(indices, 1);
             end
             row = indices(i,1);
             col = indices(i,2);
-            
-            styleSelected = uistyle('BackgroundColor', '#6495ED');
+
+            styleSelected = uistyle('BackgroundColor', obj.Settings.Theme.SearchMatchSelected);
             removeStyleFromTable(obj, obj.SearchSeletedStyle)
             addStyle(tbl, styleSelected, 'cell', [row col])
             obj.SearchSeletedStyle = styleSelected;
-            
+
             scroll(tbl, 'cell', [row, col])
-            
+
             obj.SearchIndicesIterator = i;
-            
-            e = events.SearchResultsAvailable(indices, i);
+
+            e = events.SearchResultsAvailable(indices);
             notify(obj, 'SearchResultsAvailable', e)
         end
     end
@@ -300,10 +273,12 @@ classdef TyreParametersTable < matlab.ui.componentcontainer.ComponentContainer
             paramsFitted = obj.FittedParameters;
             if isempty(paramsFitted)
                 removeStyleFromTable(obj, obj.FittedParamsStyle)
+                obj.FittedParamsStyle = matlab.ui.style.Style.empty;
             else
-                darkgreen = '#006400';
-                style = uistyle('FontColor', darkgreen);
+                style = uistyle('FontColor', obj.Settings.Theme.FittedParameterFontColor);
+                removeStyleFromTable(obj, obj.FittedParamsStyle)
                 addStyle(table, style, 'column', obj.ColumnFittedValue)
+                obj.FittedParamsStyle = style;
                 
                 paramNames = properties(paramsFitted);
                 paramNamesTbl = tableData(:, obj.ColumnParameter);

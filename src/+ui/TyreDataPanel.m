@@ -67,28 +67,10 @@ classdef TyreDataPanel < matlab.ui.componentcontainer.ComponentContainer
             notify(obj.Sidebar, 'DataImportFinished')
         end
         function onUiFigureSizeChanged(obj, ~, ~)
-            parent = obj.Parent;
-            while isa(parent, 'matlab.ui.container.GridLayout')
-                parent = parent.Parent;
-            end
-            width = parent.Position(3);
-            
-            g = obj.GridButtons;
-            buttons = obj.GridButtons.Children;
-            buttonWidths = obj.GridButtonsColumnWidthWithText;
-            buttonWidths = buttonWidths(cellfun(@isnumeric, buttonWidths));
-            minWidthButtonsWithText = sum([buttonWidths{:}]) ...
-                + (numel(buttons)+2)*g.ColumnSpacing;
-            removeTextFromButtons = width < minWidthButtonsWithText;
-            if removeTextFromButtons
-                set(buttons, 'Text', '')
-                set(g, ...
-                    'ColumnWidth', obj.GridButtonsColumnWidthOnlyIcon);
-            else
-                texts = obj.ButtonsTexts;
-                [buttons(:).Text] = deal(texts{:});
-                set(g, 'ColumnWidth', obj.GridButtonsColumnWidthWithText);
-            end
+            width = helpers.figureContentWidth(obj);
+            helpers.collapseButtonTextOnResize(width, obj.GridButtons, ...
+                obj.GridButtonsColumnWidthWithText, ...
+                obj.GridButtonsColumnWidthOnlyIcon, obj.ButtonsTexts);
         end
     end
     

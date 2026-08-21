@@ -1,0 +1,48 @@
+# Continuous integration for MATLAB. The pipeline runs the app and
+# library unit tests and packages the toolbox (.mltbx) as an artifact.
+#
+# see: https://github.com/mathworks/ci-configuration-examples
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    # windows-latest provides a desktop session, which the uifigure-based
+    # UI tests need; on ubuntu-latest they would require a virtual display.
+    # The repository is public, so MATLAB on GitHub-hosted runners is
+    # licensed automatically. For a private repository, provide a batch
+    # licensing token via the MLM_LICENSE_TOKEN environment variable.
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository with library submodule
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Set up MATLAB
+        uses: matlab-actions/setup-matlab@v3
+        # Pin a release with e.g.: release: R2026a
+
+      - name: Run tests
+        uses: matlab-actions/run-build@v3
+        with:
+          tasks: test
+
+      - name: Package toolbox
+        uses: matlab-actions/run-build@v3
+        with:
+          tasks: package
+
+      - name: Upload toolbox artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MagicFormulaTyreTool
+          path: MagicFormulaTyreTool.mltbx
+          if-no-files-found: error

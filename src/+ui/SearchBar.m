@@ -1,7 +1,7 @@
 classdef SearchBar < matlab.ui.componentcontainer.ComponentContainer
     %SEARCHBAR Search bar ui component.
     
-    properties
+    properties (SetObservable)
         Text char = char.empty
         IconPrev char = fullfile('assets', 'icons', 'fontawesome', ...
             'angle-up-solid.svg')
@@ -60,10 +60,11 @@ classdef SearchBar < matlab.ui.componentcontainer.ComponentContainer
             
             addlistener(obj, 'SearchResultsAvailable', ...
                 @obj.onSearchResultsAvailable);
+            %Keep the edit field in sync when Text is set externally (e.g.
+            %Escape clearing the search from TyreModelPanel).
+            addlistener(obj, 'Text', 'PostSet', @obj.onTextChanged);
         end
         function update(obj)
-            % set(obj.EditField, 'Value', obj.Text)
-            
             text = obj.Text;
             if isempty(text)
                 set(obj.SearchButton, 'Icon', obj.IconSearch)
@@ -73,6 +74,17 @@ classdef SearchBar < matlab.ui.componentcontainer.ComponentContainer
         end
     end
     methods (Access = private)
+        function onTextChanged(obj, ~, ~)
+            %Sync the edit field when Text is set programmatically
+            %(e.g. Escape clearing the search). Skip when the edit field
+            %already holds this value to avoid disturbing the cursor
+            %during live typing.
+            if ~isempty(obj.EditField) && isvalid(obj.EditField)
+                if ~isequal(obj.EditField.Value, obj.Text)
+                    obj.EditField.Value = obj.Text;
+                end
+            end
+        end
         function onSearchButtonPressed(obj, ~, ~)
             text = obj.Text;
             if ~isempty(text)

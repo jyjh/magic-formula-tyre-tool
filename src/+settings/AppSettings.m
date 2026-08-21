@@ -4,6 +4,7 @@ classdef AppSettings < settings.AbstractSettings
         Layout settings.LayoutSettings
         Fitter settings.FitterSettings
         Text   settings.TextSettings
+        Theme settings.ThemeSettings
         View settings.ViewSettings
         LastSession settings.LastSessionSettings
         Version char
@@ -82,9 +83,17 @@ classdef AppSettings < settings.AbstractSettings
             end
         end
         function delete(obj)
-            delete(obj.Fitter)
-            delete(obj.View)
-            delete(obj.LastSession)
+            %Delete every settings child that defines a destructor; not
+            %all AbstractSettings subclasses have one, so check first.
+            props = metaclass(obj).PropertyList;
+            for i = 1:numel(props)
+                name = props(i).Name;
+                child = obj.(name);
+                if isa(child, 'settings.AbstractSettings') ...
+                        && ismethod(child, 'delete')
+                    delete(child)
+                end
+            end
         end
     end
     methods (Static)

@@ -7,15 +7,19 @@ classdef TyreModelPanel < matlab.ui.componentcontainer.ComponentContainer
     end
     properties (Access = protected)
         Settings settings.AppSettings
-        ButtonsGridColumnWidthWithText = [repmat({110}, 1, 8) {'1x' 110}];
-        ButtonsGridColumnWidthOnlyIcon = [repmat({25}, 1, 8) {'1x' 25}];
+        ButtonsGridColumnWidthWithText = [repmat({...
+            settings.LayoutSettings().DefaultButtonWidthTextIcon...
+            }, 1, 8) {'1x' settings.LayoutSettings().DefaultButtonWidthTextIcon}];
+        ButtonsGridColumnWidthOnlyIcon = [repmat({...
+            settings.LayoutSettings().DefaultButtonWidthOnlyIcon...
+            }, 1, 8) {'1x' settings.LayoutSettings().DefaultButtonWidthOnlyIcon}];
         ButtonsTexts cell
     end
-    properties (Access = ?ui.TyreModelPanelChart, Transient, NonCopyable)
+    properties (Access = private, Transient, NonCopyable)
         MainGrid                matlab.ui.container.GridLayout
         TyreParametersTable     ui.TyreParametersTable
     end
-    properties (Access = ?ui.TyreModelPanelChart, Transient, NonCopyable)
+    properties (Access = private, Transient, NonCopyable)
         ButtonsGrid             matlab.ui.container.GridLayout
         NewModelButton          matlab.ui.control.Button
         LoadModelButton         matlab.ui.control.Button
@@ -31,7 +35,6 @@ classdef TyreModelPanel < matlab.ui.componentcontainer.ComponentContainer
         SearchBar ui.SearchBar
     end
     events (HasCallbackProperty, NotifyAccess = protected)
-        FitterSettingsChanged
         FitterStartRequested
         TyreModelClearRequested
         TyreModelEdited
@@ -59,7 +62,17 @@ classdef TyreModelPanel < matlab.ui.componentcontainer.ComponentContainer
             notify(obj.SearchBar, 'SearchResultsAvailable', e)
         end
         function onKeyPressed(obj, ~, e)
-            notify(obj.TyreParametersTable, 'KeyPressed', e)
+            %Escape clears the active search. Previously this event was
+            %forwarded into TyreParametersTable which had no listener, so
+            %the keystroke was silently dropped.
+            if strcmpi(e.Key, 'escape')
+                bar = obj.SearchBar;
+                if ~isempty(bar) && isvalid(bar) && ~isempty(bar.Text)
+                    bar.Text = char.empty;
+                    evt = events.SearchTextChanged(char.empty);
+                    notify(obj.TyreParametersTable, 'SearchTextChanged', evt)
+                end
+            end
         end
         function onSaveModelRequested(obj, ~, ~)
             notify(obj, 'TyreModelSaveRequested')
@@ -120,35 +133,10 @@ classdef TyreModelPanel < matlab.ui.componentcontainer.ComponentContainer
             notify(obj, 'TyreModelEdited')
         end
         function onUiFigureSizeChanged(obj, ~, ~)
-            parent = obj.Parent;
-            while isa(parent, 'matlab.ui.container.GridLayout')
-                parent = parent.Parent;
-            end
-            width = parent.Position(3);
-            
-            buttonsGrid = obj.ButtonsGrid;
-            buttons = obj.ButtonsGrid.Children;
-            % doesnt work due to two types of objects in array?
-            %   positions = vertcat(btns(:).Position)
-            % therefore using slower for-loop:
-            buttonWidths = obj.ButtonsGridColumnWidthWithText;
-            buttonWidths = buttonWidths(cellfun(@isnumeric, buttonWidths));
-            minWidthButtonsWithText = sum([buttonWidths{:}]) ...
-                + (numel(buttons)+2)*buttonsGrid.ColumnSpacing;
-            removeTextFromButtons = width < minWidthButtonsWithText;
-            if removeTextFromButtons
-                set(buttons, 'Text', '')
-                set(buttonsGrid, ...
-                    'ColumnWidth', obj.ButtonsGridColumnWidthOnlyIcon);
-            else
-                texts = obj.ButtonsTexts;
-                for i = 1:numel(buttons)
-                    btn = buttons(i);
-                    btn.Text = texts{i};
-                end
-                set(buttonsGrid, ...
-                    'ColumnWidth', obj.ButtonsGridColumnWidthWithText);
-            end
+            width = helpers.figureContentWidth(obj);
+            helpers.collapseButtonTextOnResize(width, obj.ButtonsGrid, ...
+                obj.ButtonsGridColumnWidthWithText, ...
+                obj.ButtonsGridColumnWidthOnlyIcon, obj.ButtonsTexts);
         end
         function onSearchTextChanged(obj, ~, event)
             notify(obj.TyreParametersTable, 'SearchTextChanged', event)

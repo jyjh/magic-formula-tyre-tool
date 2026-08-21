@@ -1,6 +1,6 @@
 opts = matlab.addons.toolbox.ToolboxOptions(pwd, 'MagicFormulaTyreTool');
 opts.ToolboxName = 'MagicFormulaTyreTool';
-opts.ToolboxVersion = '1.5.1';
+opts.ToolboxVersion = jsondecode(fileread(fullfile(pwd, 'src', 'about.json'))).Version;
 opts.Summary = 'MATLAB GUI for Magic Formula Tyre Modeling';
 opts.Description = 'https://github.com/teasit/magic-formula-tyre-tool';
 opts.ToolboxImageFile = fullfile(pwd, 'assets', 'img', 'App_Screenshot_Main.jpg');

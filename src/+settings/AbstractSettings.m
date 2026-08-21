@@ -53,10 +53,13 @@ classdef (Abstract) AbstractSettings < handle
         end
         function load(obj, settingsGroup)
             %LOAD Recursively load settings from persistent storage.
+            %Each setting is loaded independently so one corrupt value
+            %cannot abort the rest; failures warn (matching save) and the
+            %in-memory default is retained.
             props = properties(obj);
             for i = 1:numel(props)
+                settingName = props{i};
                 try
-                    settingName = props{i};
                     setting = obj.(settingName);
                     if isa(setting, 'settings.AbstractSettings')
                         settingsSubgroup = settingsGroup.(settingName);
@@ -67,6 +70,7 @@ classdef (Abstract) AbstractSettings < handle
                         obj.(settingName) = settingValue;
                     end
                 catch
+                    warning('Could not load setting ''%s''.', settingName)
                     continue
                 end
             end

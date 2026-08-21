@@ -1,4 +1,9 @@
 classdef TyrePlotCurvesPanelViewSettings < settings.AbstractSettings
+    properties (Constant)
+        %Fallback shown when no measurements are loaded and no stored
+        %values exist; keep in sync with the SteadyStateValues default.
+        DefaultSteadyStateValues = {{0} {0} {0} {0.8E5} {1.5E3}}
+    end
     properties (SetObservable, AbortSet)
         AutoRefresh logical = false
         LegendOn logical = true
@@ -8,7 +13,7 @@ classdef TyrePlotCurvesPanelViewSettings < settings.AbstractSettings
         XAxis char = 'LONGSLIP'
         YAxis char = 'FX'
         XRange (1,2) = [-1 1]
-        
+
         SteadyStateValues cell = {{0} {0} {0} {0.8E5} {1.5E3}}
         SteadyStateValuesSelected cell = [{0} {0} {0} {0.8E5} {1.5E3}]
         SteadyStateNamesSelected cell = {

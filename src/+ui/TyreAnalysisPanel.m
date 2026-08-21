@@ -78,32 +78,10 @@ classdef TyreAnalysisPanel < matlab.ui.componentcontainer.ComponentContainer
             notify(plot, 'TyreDataChanged', eventData)
         end
         function onUiFigureSizeChanged(obj, ~, ~)
-            parent = obj.Parent;
-            while isa(parent, 'matlab.ui.container.GridLayout')
-                parent = parent.Parent;
-            end
-            width = parent.Position(3);
-            
-            buttonsGrid = obj.ButtonsGrid;
-            buttons = obj.ButtonsGrid.Children;
-            buttonWidths = obj.ButtonsGridColumnWidthWithText;
-            buttonWidths = buttonWidths(cellfun(@isnumeric, buttonWidths));
-            minWidthButtonsWithText = sum([buttonWidths{:}]) ...
-                + (numel(buttons)+2)*buttonsGrid.ColumnSpacing;
-            removeTextFromButtons = width < minWidthButtonsWithText;
-            widthOnlyIcon = obj.ButtonsGridColumnWidthOnlyIcon;
-            widthWithText = obj.ButtonsGridColumnWidthWithText;
-            if removeTextFromButtons
-                set(buttons, 'Text', '')
-                set(buttonsGrid, 'ColumnWidth', widthOnlyIcon);
-            else
-                texts = obj.ButtonsTexts;
-                for i = 1:numel(buttons)
-                    btn = buttons(i);
-                    btn.Text = texts{i};
-                end
-                set(buttonsGrid, 'ColumnWidth', widthWithText);
-            end
+            width = helpers.figureContentWidth(obj);
+            helpers.collapseButtonTextOnResize(width, obj.ButtonsGrid, ...
+                obj.ButtonsGridColumnWidthWithText, ...
+                obj.ButtonsGridColumnWidthOnlyIcon, obj.ButtonsTexts);
         end
     end
     methods(Access = protected)

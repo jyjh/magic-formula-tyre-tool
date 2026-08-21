@@ -4,6 +4,7 @@
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/teasit/magic-formula-tyre-tool)](https://github.com/teasit/magic-formula-tyre-tool/releases/latest)
 [![GitHub downloads](https://img.shields.io/github/downloads/teasit/magic-formula-tyre-tool/total)](https://github.com/teasit/magic-formula-tyre-tool/releases/latest)
 ![MATLAB version compatability](https://img.shields.io/badge/compatibility-%E2%89%A5R2021a-orange)
+[![MATLAB CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 
 ![Screenshot Analysis Tab with Plots](/assets/img/App_Screenshot_Main.jpg)
 
@@ -57,6 +58,20 @@ There are several ways:
 - Download latest Release from [MATLAB File Exchange](https://de.mathworks.com/matlabcentral/fileexchange/111375)
 - Download latest Release from [GitHub](https://github.com/teasit/magic-formula-tyre-tool/releases)
 - Clone using Git and integrate into your projects using a [Project Reference](https://mathworks.com/help/simulink/ug/add-or-remove-a-reference-to-another-project.html)
+
+## Development
+
+The test suites and the toolbox package are managed with the
+[MATLAB build tool](https://mathworks.com/help/matlab/ref/buildtool.html):
+
+```matlab
+buildtool test      % run app and library unit tests
+buildtool package   % run tests, then build MagicFormulaTyreTool.mltbx
+```
+
+Continuous integration ([.github/workflows/ci.yml](.github/workflows/ci.yml))
+runs the same tasks on every push and pull request and uploads the packaged
+toolbox as a workflow artifact.
 
 ## Usage
 
@@ -112,6 +127,9 @@ additional import field. It supplies the commanded schedules, run-quality commen
 speed blocks, and physical tyre serial number that are not encoded reliably in the MAT
 file. With this workbook the importer uses scheduled setpoints and contiguous test
 blocks; without it, it falls back to legacy histogram-based condition detection.
+Enable **Ignore incomplete C6 mechanical-limit buckets** to retain valid buckets from
+a C6-flagged run while discarding only slip sweeps that fail to reach both scheduled
+directions. The import confirmation reports the detected bucket and fragment counts.
 
 ![Animation Data Import](assets/img/App_Screenshot_DataImport.gif)
 

@@ -1,12 +1,10 @@
 classdef (ConstructOnLoad) SearchResultsAvailable < event.EventData
    properties
       SearchIndices (:,2)
-      SearchIndicesIterator (1,1)
    end
    methods
-       function e = SearchResultsAvailable(indices, iterator)
+       function e = SearchResultsAvailable(indices)
            e.SearchIndices = indices;
-           e.SearchIndicesIterator = iterator;
       end
    end
 end

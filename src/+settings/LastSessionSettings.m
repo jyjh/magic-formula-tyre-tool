@@ -9,6 +9,8 @@ classdef LastSessionSettings < settings.AbstractSettings
         MeasurementParser char
         %Optional companion FSAE TTC Summary Tables workbook.
         MeasurementSummaryTableFile char
+        %Exclude only incomplete schedule buckets from C6-flagged runs.
+        IgnoreC6MechanicalLimitBuckets logical = false
     end
     methods
         function obj = LastSessionSettings()

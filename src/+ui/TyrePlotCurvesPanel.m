@@ -13,13 +13,6 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
             'INCLANGL'
             'INFLPRES'
             'FZW'}
-        SteadyStateUnitsAll = {
-            '1'
-            'deg'
-            'deg'
-            'bar'
-            'N'
-            };
         LegendLabels = {};
         Settings settings.AppSettings
         ViewSettingsChangedListener event.listener
@@ -86,7 +79,7 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
                             legend(obj.Axes, labels, ...
                                 'Location', 'southeast', ...
                                 'Orientation', 'Horizontal', ...
-                                'FontName', 'FixedWidth', ...
+                                'FontName', obj.Settings.Theme.PlotFontName, ...
                                 'NumColumns', 3)
                         end
                     else
@@ -130,8 +123,8 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
             isPascal = contains(names, 'INFLPRES');
             values(isRad) = cellfun(@rad2deg, values(isRad), ...
                 'UniformOutput', false);
-            values(isPascal) = cellfun(@(x)x*1E-5, values(isPascal), ...
-                'UniformOutput', false);
+            values(isPascal) = cellfun(@helpers.pascal2bar, ...
+                values(isPascal), 'UniformOutput', false);
             units = obj.getUnitsFromNames(names);
             values = cellfun(@(x)round(x,2), values, 'UniformOutput', false);
             valuesStr = cellfun(@num2str, values, 'UniformOutput', false);
@@ -159,7 +152,7 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
                 contains(steadyStateNames, {'SLIPANGL', 'INCLANGL'}));
             steadyStateValues(isDegByUser) = cellfun(@deg2rad, ...
                 steadyStateValues(isDegByUser), 'UniformOutput', false);
-            steadyStateValues(isBarByUser) = cellfun(@(x)x*1E5, ...
+            steadyStateValues(isBarByUser) = cellfun(@helpers.bar2pascal, ...
                 steadyStateValues(isBarByUser), 'UniformOutput', false);
             
             names = steadyStateNames;
@@ -172,12 +165,6 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
             s = obj.Settings.View.TyreAnalysisPanel.TyrePlotCurvesPanel;
 
             measurements = obj.Measurements;
-            if isempty(measurements)
-                mc = ?settings.TyrePlotCurvesPanelViewSettings;
-                mp = mc.PropertyList;
-                prop = findobj(mp, 'Name', 'SteadyStateValues');
-                steadyStateValues = prop.DefaultValue;
-            end
 
             xAxis = obj.XAxisSettingDropDown.Value;
             yAxis = obj.YAxisSettingDropDown.Value;
@@ -271,38 +258,16 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
         end
         function onXAxisRangeChanged(obj, ~, event)
             s = obj.Settings.View.TyreAnalysisPanel.TyrePlotCurvesPanel;
-            range = event.Range;
             xAxisLabel = obj.XAxisSettingDropDown.Value;
-            switch xAxisLabel
-                case 'LONGSLIP'
-                    s.XAxisRangeLONGSLIP = range;
-                case 'SLIPANGL'
-                    s.XAxisRangeSLIPANGL = range;
-                case 'INCLANGL'
-                    s.XAxisRangeINCLANGL = range;
-                case 'INFLPRES'
-                    s.XAxisRangeINFLPRES = range;
-                case 'FZW'
-                    s.XAxisRangeFZW = range;
-                otherwise
-                    return
+            %Range settings follow the naming scheme XAxisRange<NAME>.
+            if ~any(strcmp(xAxisLabel, obj.SteadyStateNamesAll))
+                return
             end
+            s.(['XAxisRange' xAxisLabel]) = event.Range;
             updatePlot(obj)
         end
     end
-    methods(Access = protected)
-        function updateSidebarState(obj)
-            show = obj.Settings.View.TyreAnalysisPanel.ShowSidebar;
-            sidebar = obj.SidePanel;
-            axes = obj.Axes;
-            if show
-                set(sidebar, 'Visible', 'on')
-                axes.Layout.Column = 1;
-            else
-                set(sidebar, 'Visible', 'off')
-                axes.Layout.Column = [1 2];
-            end
-        end
+    methods (Access = protected)
         function updatePlot(obj)
             ax = obj.Axes;
             s = obj.Settings.View.TyreAnalysisPanel.TyrePlotCurvesPanel;
@@ -330,86 +295,50 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
             vals = s.SteadyStateValuesSelected;
             
             if plotModel
-                switch xVar
-                    case 'LONGSLIP'
-                        range = s.XAxisRangeLONGSLIP;
-                        LONGSLIP = linspace(range(1), range(2));
-                        SLIPANGL = vals{strcmp(vars, 'SLIPANGL')};
-                        INCLANGL = vals{strcmp(vars, 'INCLANGL')};
-                        INFLPRES = vals{strcmp(vars, 'INFLPRES')};
-                        FZW      = vals{strcmp(vars, 'FZW')};
-                        xVal = LONGSLIP;
-                    case 'SLIPANGL'
-                        range = s.XAxisRangeSLIPANGL;
-                        LONGSLIP = vals{strcmp(vars, 'LONGSLIP')};
-                        SLIPANGL = deg2rad(linspace(range(1), range(2)));
-                        INCLANGL = vals{strcmp(vars, 'INCLANGL')};
-                        INFLPRES = vals{strcmp(vars, 'INFLPRES')};
-                        FZW      = vals{strcmp(vars, 'FZW')};
-                        xVal = rad2deg(SLIPANGL);
-                    case 'INCLANGL'
-                        range = s.XAxisRangeINCLANGL;
-                        LONGSLIP = vals{strcmp(vars, 'LONGSLIP')};
-                        SLIPANGL = vals{strcmp(vars, 'SLIPANGL')};
-                        INCLANGL = deg2rad(linspace(range(1), range(2)));
-                        INFLPRES = vals{strcmp(vars, 'INFLPRES')};
-                        FZW      = vals{strcmp(vars, 'FZW')};
-                        xVal = rad2deg(INCLANGL);
-                    case 'INFLPRES'
-                        pascal2bar = @(x) x*1E-5;
-                        bar2pascal = @(x) x*1E+5;
-                        range = bar2pascal(s.XAxisRangeINFLPRES);
-                        LONGSLIP = vals{strcmp(vars, 'LONGSLIP')};
-                        SLIPANGL = vals{strcmp(vars, 'SLIPANGL')};
-                        INCLANGL = vals{strcmp(vars, 'INCLANGL')};
-                        INFLPRES = linspace(range(1), range(2));
-                        FZW      = vals{strcmp(vars, 'FZW')};
-                        xVal = pascal2bar(INFLPRES);
-                    case 'FZW'
-                        range = s.XAxisRangeFZW;
-                        LONGSLIP = vals{strcmp(vars, 'LONGSLIP')};
-                        SLIPANGL = vals{strcmp(vars, 'SLIPANGL')};
-                        INCLANGL = vals{strcmp(vars, 'INCLANGL')};
-                        INFLPRES = vals{strcmp(vars, 'INFLPRES')};
-                        FZW = linspace(range(1), range(2));
-                        xVal = FZW;
-                    otherwise
-                        warning('Invalid x-axis variable!')
-                        cla(ax)
-                        return
+                if ~any(strcmp(xVar, obj.SteadyStateNamesAll))
+                    warning('Invalid x-axis variable!')
+                    cla(ax)
+                    return
                 end
-                
-                tyre = obj.Model;
-                switch yVar
-                    case 'FX'
-                        FX = magicformula(tyre, ...
-                            LONGSLIP, SLIPANGL, FZW, INFLPRES, INCLANGL);
-                        yVal = FX;
-                    case 'FYW'
-                        [~,FY] = magicformula(tyre, ...
-                            LONGSLIP, SLIPANGL, FZW, INFLPRES, INCLANGL);
-                        yVal = FY;
-                    case 'MZW'
-                        [~,~,MZ] = magicformula(tyre, ...
-                            LONGSLIP, SLIPANGL, FZW, INFLPRES, INCLANGL);
-                        yVal = MZ;
-                    case 'MYW'
-                        [~,~,~,MY] = magicformula(tyre, ...
-                            LONGSLIP, SLIPANGL, FZW, INFLPRES, INCLANGL);
-                        yVal = MY;
-                    case 'MXW'
-                        [~,~,~,~,MX] = magicformula(tyre, ...
-                            LONGSLIP, SLIPANGL, FZW, INFLPRES, INCLANGL);
-                        yVal = MX;
-                    otherwise
-                        warning('Invalid y-axis variable!')
-                        cla(ax)
-                        return
+                %Model inputs are SI (rad, Pa); ranges and the x-axis are
+                %in user units (deg, bar), so the swept variable converts.
+                range = s.(['XAxisRange' xVar]);
+                xVal = linspace(range(1), range(2));
+                sweepSI = xVal;
+                if any(strcmp(xVar, {'SLIPANGL', 'INCLANGL'}))
+                    sweepSI = deg2rad(sweepSI);
+                elseif strcmp(xVar, 'INFLPRES')
+                    sweepSI = helpers.bar2pascal(sweepSI);
                 end
-                
+                inputs = struct( ...
+                    'LONGSLIP', vals{strcmp(vars, 'LONGSLIP')}, ...
+                    'SLIPANGL', vals{strcmp(vars, 'SLIPANGL')}, ...
+                    'INCLANGL', vals{strcmp(vars, 'INCLANGL')}, ...
+                    'INFLPRES', vals{strcmp(vars, 'INFLPRES')}, ...
+                    'FZW', vals{strcmp(vars, 'FZW')});
+                inputs.(xVar) = sweepSI;
+
+                %Outputs of magicformula are ordered [FX, FY, MZ, MY, MX];
+                %note this differs from the Y-Axis dropdown item order.
+                yOutputNames = {'FX', 'FYW', 'MZW', 'MYW', 'MXW'};
+                k = find(strcmp(yOutputNames, yVar));
+                if isempty(k)
+                    warning('Invalid y-axis variable!')
+                    cla(ax)
+                    return
+                end
+                %Request exactly k outputs: magicformula only evaluates
+                %the outputs that are requested (e.g. Mz may be undefined
+                %for degenerate parameters while Fx is fine).
+                outs = cell(1, k);
+                [outs{:}] = magicformula(obj.Model, ...
+                    inputs.LONGSLIP, inputs.SLIPANGL, inputs.FZW, ...
+                    inputs.INFLPRES, inputs.INCLANGL);
+                yVal = outs{k};
+
                 hModel = plot(ax, xVal, yVal, 'LineWidth', 2);
             end
-            
+
             if plotData
                 measurements = getMeasurementAtSelectedSteadyStates(obj);
                 if isempty(measurements)
@@ -418,52 +347,32 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
                     title = 'Tyre Analysis';
                     uialert(fig, message, title)
                 end
-                
-                switch xVar
-                    case 'LONGSLIP'
-                        LONGSLIP = vertcat(measurements.LONGSLIP);
-                        xVal = LONGSLIP;
-                    case 'SLIPANGL'
-                        SLIPANGL = vertcat(measurements.SLIPANGL);
-                        xVal = rad2deg(SLIPANGL);
-                    case 'INCLANGL'
-                        INCLANGL = vertcat(measurements.INCLANGL);
-                        xVal = rad2deg(INCLANGL);
-                    case 'INFLPRES'
-                        INFLPRES = vertcat(measurements.INFLPRES);
-                        xVal = INFLPRES * 1E-5;
-                    case 'FZW'
-                        FZW = vertcat(measurements.FZW);
-                        xVal = FZW;
-                    otherwise
-                        warning('Invalid x-axis variable!')
-                        cla(ax)
-                        return
+
+                if ~any(strcmp(xVar, obj.SteadyStateNamesAll))
+                    warning('Invalid x-axis variable!')
+                    cla(ax)
+                    return
                 end
-                
-                switch yVar
-                    case 'FX'
-                        yVal = vertcat(measurements.FX);
-                    case 'FYW'
-                        yVal = vertcat(measurements.FYW);
-                    case 'MZW'
-                        yVal = vertcat(measurements.MZW);
-                    case 'MYW'
-                        yVal = vertcat(measurements.MYW);
-                    case 'MXW'
-                        yVal = vertcat(measurements.MXW);
-                    otherwise
-                        warning('Invalid y-axis variable!')
-                        cla(ax)
-                        return
+                xVal = vertcat(measurements.(xVar));
+                if any(strcmp(xVar, {'SLIPANGL', 'INCLANGL'}))
+                    xVal = rad2deg(xVal);
+                elseif strcmp(xVar, 'INFLPRES')
+                    xVal = helpers.pascal2bar(xVal);
                 end
+
+                if ~ismember(yVar, obj.YAxisSettingDropDown.Items)
+                    warning('Invalid y-axis variable!')
+                    cla(ax)
+                    return
+                end
+                yVal = vertcat(measurements.(yVar));
 
                 if ~isempty(yVal)
                     hData = plot(ax, xVal, yVal, ...
                     'Marker', '.', ...
                     'LineStyle', 'none');
                 end
-                
+
                 if plotModel
                     color = hModel.Color;
                     set(hData, 'Color', color);
@@ -490,9 +399,9 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
                 legend(ax, 'off');
                 obj.LegendLabels = {};
             else
+                labelVals = getLegendLabelFromNameValuePairs(obj, ...
+                    vars, vals);
                 for i = 1:numel(labels)
-                    labelVals = getLegendLabelFromNameValuePairs(obj, ...
-                        vars, vals);
                     labels{i} = sprintf('%s\n%s', labels{i}, labelVals);
                 end
                 if holdOn
@@ -504,7 +413,7 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
                     legend(labels, ...
                         'Location', 'southeast', ...
                         'Orientation', 'Horizontal', ...
-                        'FontName', 'FixedWidth', ...
+                        'FontName', obj.Settings.Theme.PlotFontName, ...
                         'NumColumns', 3)
                 end
                 obj.LegendLabels = labels;
@@ -521,22 +430,16 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
             measurements = obj.Measurements;
             s = obj.Settings.View.TyreAnalysisPanel.TyrePlotCurvesPanel;
             if isempty(measurements)
-                try
-                    itemsSteadyState = s.SteadyStateValues;
-                    notEmpty = all(~cellfun(@isempty, itemsSteadyState));
-                    assert(notEmpty)
-                catch
-                    mc = ?settings.TyrePlotCurvesPanelViewSettings;
-                    mp = mc.PropertyList;
-                    prop = findobj(mp, 'Name', 'SteadyStateValues');
-                    itemsSteadyState = prop.DefaultValue;
+                itemsSteadyState = s.SteadyStateValues;
+                if any(cellfun(@isempty, itemsSteadyState))
+                    itemsSteadyState = ...
+                        settings.TyrePlotCurvesPanelViewSettings.DefaultSteadyStateValues;
                 end
             else
                 findSteadyStateValues(obj)
                 itemsSteadyState = s.SteadyStateValues;
             end
             
-            pascal2bar = @(x) x*1E-5;
             names = obj.SteadyStateNamesAll;
             for i = 1:size(itemsSteadyState, 2)
                 dd = obj.SteadyStateSettingDropDowns(i);
@@ -549,7 +452,7 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
                     items = rad2deg(items);
                 end
                 if contains(name, 'INFLPRES')
-                    items = pascal2bar(items);
+                    items = helpers.pascal2bar(items);
                 end
                 
                 itemsStr = num2str(items);
@@ -570,33 +473,19 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
         function updateXAxisRangeSelector(obj)
             s = obj.Settings.View.TyreAnalysisPanel.TyrePlotCurvesPanel;
             xAxisLabel = obj.XAxisSettingDropDown.Value;
-            switch xAxisLabel
-                case 'LONGSLIP'
-                    range = s.XAxisRangeLONGSLIP;
-                    limits = [-1 1];
-                    unit = '1';
-                case 'SLIPANGL'
-                    range = s.XAxisRangeSLIPANGL;
-                    limits = [-90 90];
-                    unit = 'deg';
-                case 'INCLANGL'
-                    range = s.XAxisRangeINCLANGL;
-                    limits = [-90 90];
-                    unit = 'deg';
-                case 'INFLPRES'
-                    range = s.XAxisRangeINFLPRES;
-                    limits = [0 10];
-                    unit = 'bar';
-                case 'FZW'
-                    range = s.XAxisRangeFZW;
-                    limits = [0 1E5];
-                    unit = 'N';
-                otherwise
-                    return
+            limitsMap = struct( ...
+                'LONGSLIP', [-1 1], ...
+                'SLIPANGL', [-90 90], ...
+                'INCLANGL', [-90 90], ...
+                'INFLPRES', [0 10], ...
+                'FZW', [0 1E5]);
+            if ~isfield(limitsMap, xAxisLabel)
+                return
             end
-            obj.XAxisRangeSelector.RangeLimits = limits;
-            obj.XAxisRangeSelector.Range = range;
-            obj.XAxisRangeSelector.Unit = unit;
+            obj.XAxisRangeSelector.RangeLimits = limitsMap.(xAxisLabel);
+            obj.XAxisRangeSelector.Range = s.(['XAxisRange' xAxisLabel]);
+            obj.XAxisRangeSelector.Unit = ...
+                char(obj.getUnitsFromNames(xAxisLabel));
         end
         function updatePlotSettings(obj)
             s = obj.Settings.View.TyreAnalysisPanel.TyrePlotCurvesPanel;
@@ -616,16 +505,6 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
         end
     end
     methods(Access = protected)
-        function setupMainGrid(obj)
-            s = obj.Settings.Layout;
-            w = s.DefaultSidebarWidth;
-            obj.MainGrid = uigridlayout(obj, ...
-                'RowHeight', {'1x'}, ...
-                'ColumnWidth', {'1x', w}, ...
-                'ColumnSpacing', s.DefaultColumnSpacing, ...
-                'Padding', 0*ones(1,4), ...
-                'Scrollable', false);
-        end
         function setupPlotSettingsPanel(obj)
             s = obj.Settings.Layout;
             w = s.DefaultButtonWidthTextIcon;
@@ -651,19 +530,24 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
                 'Text', 'On', ...
                 'Value', s.LegendOn, ...
                 'Tag', 'LegendOn', ...
+                'Tooltip', 'Show/hide the plot legend.', ...
                 'ValueChangedFcn', @obj.onSettingsChanged);
             uilabel(grid, 'Text', 'Show Legend');
-            
+
             obj.HoldOnSettingStateButton = uibutton(grid, 'state', ...
                 'Value', s.HoldOn, ...
                 'Text', 'On', ...
+                'Tooltip', ['Keep existing curves on the axes when the ' ...
+                    'plot refreshes, so successive configurations ' ...
+                    'overlay for comparison.'], ...
                 'ValueChangedFcn', @obj.onSettingsChanged, ...
                 'Tag', 'HoldOn');
             uilabel(grid, 'Text', 'Hold');
-            
+
             obj.DataShowSettingStateButton = uibutton(grid, 'state', ...
                 'Text', 'Show', ...
                 'Value', s.DataShow, ...
+                'Tooltip', 'Plot imported measurement points.', ...
                 'ValueChangedFcn', @obj.onSettingsChanged, ...
                 'Tag', 'DataShow');
             uilabel(grid, 'Text', 'Measurement Data');
@@ -671,22 +555,25 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
             obj.ModelShowSettingStateButton = uibutton(grid, 'state', ...
                 'Value', s.ModelShow, ...
                 'Text', 'Show', ...
+                'Tooltip', 'Plot the current tyre model curve.', ...
                 'ValueChangedFcn', @obj.onSettingsChanged, ...
                 'Tag', 'ModelShow');
             uilabel(grid, 'Text', 'Tire Model');
-            
+
             obj.XAxisSettingDropDown = uidropdown(grid, ...
                 'Items', obj.SteadyStateNamesAll, ...
                 'Value', s.XAxis, ...
                 'Tag', 'XAxis', ...
+                'Tooltip', 'Quantity to sweep on the X-axis.', ...
                 'ValueChangedFcn', @obj.onSettingsChanged);
             uilabel(grid, ...
                 'Text', 'X-Axis', ...
                 'Tag', 'XAxis');
-            
+
             obj.YAxisSettingDropDown = uidropdown(grid, ...
                 'Items', {'FX','FYW','MXW','MYW','MZW'}, ...
                 'Tag', 'YAxis', ...
+                'Tooltip', 'Force/moment to plot on the Y-axis.', ...
                 'ValueChangedFcn', @obj.onSettingsChanged);
             uilabel(grid, ...
                 'Text', 'Y-Axis');
@@ -708,7 +595,7 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
                 'Scrollable', false);
             
             names = obj.SteadyStateNamesAll;
-            units = obj.SteadyStateUnitsAll;
+            units = obj.getUnitsFromNames(names);
             units = cellfun(@(x) sprintf('[%s]', x), units, ...
                 'UniformOutput', false);
             
@@ -770,7 +657,8 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
         function setup(obj)
             set(obj, 'Position', [0 0 800 400])
             obj.Settings = settings.AppSettings();
-            setupMainGrid(obj)
+            obj.MainGrid = helpers.plotPanelMainGrid(obj, ...
+                obj.Settings.Layout);
             setupAxes(obj)
             setupSidePanel(obj)
             setupPlotSettingsPanel(obj)
@@ -778,7 +666,8 @@ classdef TyrePlotCurvesPanel < matlab.ui.componentcontainer.ComponentContainer
             setupListeners(obj)
         end
         function update(obj)
-            updateSidebarState(obj)
+            helpers.applySidebarLayout(obj.SidePanel, obj.Axes, ...
+                obj.Settings.View.TyreAnalysisPanel.ShowSidebar);
             updatePlotSettings(obj)
             updateDropDowns(obj)
             updateXAxisRangeSelector(obj)

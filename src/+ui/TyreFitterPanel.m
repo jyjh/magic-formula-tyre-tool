@@ -6,11 +6,7 @@ classdef TyreFitterPanel < matlab.ui.componentcontainer.ComponentContainer
         FitterFittingModesChanged
         FitterSolverSettingsChanged
     end
-    
-    events (NotifyAccess = public)
-        TyreFitterModesChanged
-    end
-    
+
     properties (Access = private, Transient, NonCopyable)
         Grid                        matlab.ui.container.GridLayout
         MainGrid                    matlab.ui.container.GridLayout
@@ -37,10 +33,6 @@ classdef TyreFitterPanel < matlab.ui.componentcontainer.ComponentContainer
         end
         function onRunStateButtonValueChanged(obj, ~, ~)
             notify(obj, 'FitterStartRequested')
-        end
-        function onTyreFitterModesChanged(obj, ~, event)
-            fitmodes = event.FitModes;
-            obj.FittingModesPanel.FitModes = fitmodes;
         end
     end
     
@@ -75,8 +67,6 @@ classdef TyreFitterPanel < matlab.ui.componentcontainer.ComponentContainer
                 'Text', 'Run Fitter', ...
                 'Icon', 'play-solid.svg', ...
                 'ButtonPushedFcn', @obj.onRunStateButtonValueChanged);
-            addlistener(obj, 'TyreFitterModesChanged', ...
-                @obj.onTyreFitterModesChanged);
         end
         function update(obj)
         end

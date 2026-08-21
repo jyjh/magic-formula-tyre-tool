@@ -54,6 +54,11 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
         TyreModelAnalysisTab    matlab.ui.container.Tab
         TyreModelAnalysisGrid   matlab.ui.container.GridLayout
         TyreAnalysisPanel       ui.TyreAnalysisPanel
+
+        StatusBar               ui.StatusBar
+        %One-shot timer that clears the status bar after a short delay.
+        %Stored so a new setStatus call can cancel a pending clear.
+        StatusTimer             timer
     end
     methods (Static, Access = private)
         function config = initAboutConfiguration()
@@ -173,10 +178,71 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             notify(app.TyreModelPanel, 'KeyPressed', e)
         end
         function onUiFigureSizeChanged(app, ~, ~)
-            position = app.UIFigure.Position;
-            width = position(3);
-            height = position(4);
-            % todo: do stuff here
+            %Enforce a minimum usable figure size. AutoResizeChildren is
+            %off, so without a floor the window can be shrunk until the
+            %button bars and tabs become unusable. If the user sizes below
+            %the floor, snap back to the floor on the offending axis only.
+            fig = app.UIFigure;
+            pos = fig.Position;
+            minWidth = app.Settings.Layout.DefaultButtonWidthTextIcon ...
+                * 4 + app.Settings.Layout.DefaultColumnSpacing * 5;
+            minHeight = app.Settings.Layout.DefaultButtonHeight * 6;
+            changed = false;
+            if pos(3) < minWidth
+                pos(3) = minWidth;
+                changed = true;
+            end
+            if pos(4) < minHeight
+                pos(4) = minHeight;
+                changed = true;
+            end
+            if changed
+                fig.Position = pos;
+            end
+        end
+        function setStatus(app, message, opts)
+            %SETSTATUS Show a transient message in the status bar.
+            %   setStatus(app, message)
+            %   setStatus(app, message, 'Icon', name)
+            %   setStatus(app, message, 'Persist', true)
+            %Icon maps a few friendly names to status icon files. When
+            %'Persist' is false (default) the message auto-clears after a
+            %few seconds; the clear timer is owned by the app so a new
+            %setStatus call cancels any pending clear.
+            arguments
+                app
+                message char
+                opts.Icon {mustBeCharOrEmpty} = char.empty
+                opts.Persist (1,1) logical = false
+            end
+            persist = opts.Persist;
+            icon = opts.Icon;
+            %Map friendly icon names to the available svg files. Only
+            %error/info have dedicated icons in assets/icons/fontawesome;
+            %success/warning fall back to text-only (no icon).
+            iconMap = containers.Map(...
+                {'error','info'}, ...
+                {'circle-xmark-solid.svg','circle-info-solid.svg'});
+            if isKey(iconMap, icon)
+                icon = iconMap(icon);
+            elseif any(strcmp(icon, {'success','warning'}))
+                icon = char.empty;
+            end
+            bar = app.StatusBar;
+            bar.Text = message;
+            bar.Icon = icon;
+            %Cancel any pending auto-clear.
+            if ~isempty(app.StatusTimer) && isvalid(app.StatusTimer)
+                stop(app.StatusTimer)
+            end
+            if ~persist && ~isempty(message)
+                t = timer(...
+                    'TimerFcn', @(~,~) app.setStatus(char.empty), ...
+                    'StartDelay', 6, ...
+                    'ExecutionMode', 'singleShot');
+                app.StatusTimer = t;
+                start(t)
+            end
         end
         function onUiFigureCloseRequest(app, ~, ~)
             fig = app.UIFigure;
@@ -250,14 +316,8 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             fitmode = fitmodes(I);
             enable = ~logical(source.Checked);
             fitmodesEnabled = app.Settings.Fitter.FitModes;
-            if enable
-                fitmodesEnabled = [fitmodesEnabled fitmode];
-                fitmodesEnabled = sort(fitmodesEnabled);
-                fitmodesEnabled = unique(fitmodesEnabled);
-            else
-                I = fitmodesEnabled == fitmode;
-                fitmodesEnabled(I) = [];
-            end
+            fitmodesEnabled = helpers.toggleFitMode(fitmodesEnabled, ...
+                fitmode, enable);
             app.Settings.Fitter.FitModes = fitmodesEnabled;
             source.Checked = matlab.lang.OnOffSwitchState(enable);
         end
@@ -273,6 +333,8 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             try
                 model = MagicFormulaTyre(file);
                 app.setTyreModel(model)
+                app.setStatus(sprintf('Loaded tyre model from %s.', fileName), ...
+                    'Icon', 'success')
             catch cause
                 exception = exceptions.CouldNotImportTIR(fileName);
                 exception = addCause(exception, cause);
@@ -295,12 +357,18 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 end
                 parserHandle = event.Parser;
                 summaryTableFile = event.SummaryTableFile;
+                ignoreC6MechanicalLimitBuckets = ...
+                    helpers.shouldIgnoreC6Buckets(...
+                    event.IgnoreC6MechanicalLimitBuckets, summaryTableFile);
                 importResult = app.runMeasurementImport( ...
-                    files,parserHandle,summaryTableFile);
+                    files,parserHandle,summaryTableFile, ...
+                    ignoreC6MechanicalLimitBuckets);
                 app.recordLastSessionMeasurementFiles(files)
                 app.Settings.LastSession.MeasurementParser = func2str(parserHandle);
                 app.Settings.LastSession.MeasurementSummaryTableFile = ...
                     summaryTableFile;
+                app.Settings.LastSession.IgnoreC6MechanicalLimitBuckets = ...
+                    ignoreC6MechanicalLimitBuckets;
                 if isempty(summaryTableFile)
                     msg = sprintf(['Import successful.\n\n' ...
                         'Source files: %d\nMeasurement segments: %d'], ...
@@ -308,16 +376,30 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                         importResult.MeasurementCount);
                 else
                     [~,summaryName,summaryExt] = fileparts(summaryTableFile);
+                    if importResult.C6FilterEnabled
+                        c6FilterState = 'enabled';
+                    else
+                        c6FilterState = 'disabled';
+                    end
                     msg = sprintf(['Import successful.\n\n' ...
                         'Summary Tables workbook applied:\n%s%s\n\n' ...
                         'Matched runs: %d of %d\n' ...
-                        'Measurement segments: %d'], ...
+                        'Measurement segments: %d\n' ...
+                        'C6 bucket filter: %s\n' ...
+                        'Mechanical-limit buckets ignored: %d\n' ...
+                        'Incomplete fragments discarded: %d'], ...
                         summaryName,summaryExt, ...
                         importResult.SummaryMatchedRunCount, ...
                         importResult.SourceFileCount, ...
-                        importResult.MeasurementCount);
+                        importResult.MeasurementCount, ...
+                        c6FilterState, ...
+                        importResult.SkippedMechanicalLimitBuckets, ...
+                        importResult.SkippedIncompleteSegments);
                 end
                 uialert(fig, msg, title, 'Icon', 'success')
+                app.setStatus(sprintf(['Imported %d measurements from %d ' ...
+                    'file(s).'], importResult.MeasurementCount, ...
+                    importResult.SourceFileCount), 'Icon', 'success')
             catch cause
                 if exist('summaryTableFile','var') && ~isempty(summaryTableFile)
                     [~,summaryName,summaryExt] = fileparts(summaryTableFile);
@@ -334,7 +416,8 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 throw(exception)
             end
         end
-        function result = runMeasurementImport(app, files, parser, summaryTableFile)
+        function result = runMeasurementImport(app, files, parser, ...
+                summaryTableFile,ignoreC6MechanicalLimitBuckets)
             %RUNMEASUREMENTIMPORT Parse measurement files, load them, and
             %apply derived nominal parameters to the current model. Shared
             %by the interactive import path and the last-session reopen on
@@ -344,32 +427,60 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 files cell
                 parser function_handle
                 summaryTableFile char = char.empty
+                ignoreC6MechanicalLimitBuckets (1,1) logical = false
             end
             fig = app.UIFigure;
             title = 'Measurement Import';
             if isempty(summaryTableFile)
-                msg = 'Importing measurements...'; %TODO: not indeterminate
+                baseMsg = 'Importing measurements...';
             else
                 [~,summaryName,summaryExt] = fileparts(summaryTableFile);
-                msg = sprintf('Applying Summary Tables workbook %s%s...', ...
+                baseMsg = sprintf('Applying Summary Tables workbook %s%s...', ...
                     summaryName,summaryExt);
+                if ignoreC6MechanicalLimitBuckets
+                    baseMsg = [baseMsg ' Filtering incomplete C6 buckets...'];
+                end
             end
+            % Per-file progress message. The dialog stays Indeterminate
+            % because the parser itself does not report sub-file progress;
+            % see magic-formula-tyre-library (out of scope to change here).
             dlg = uiprogressdlg(fig, ...
                 'Title', title,...
-                'Message', msg, ...
+                'Message', baseMsg, ...
                 'Indeterminate','on', ...
                 'Cancelable', 'off');
             cleanup = onCleanup(@() close(dlg));
             measurements = app.TyreMeasurements;
             importedMeasurementCount = 0;
+            skippedMechanicalLimitBuckets = 0;
+            skippedIncompleteSegments = 0;
             parserInstance = parser();
+            if ~isa(parserInstance,'tydex.Parser')
+                error('MagicFormulaTyreTool:InvalidMeasurementParser', ...
+                    ['Selected class "%s" is not a measurement parser. ' ...
+                    'Select FSAETTC_SI_ISO_Mat for FSAE TTC MAT files.'], ...
+                    class(parserInstance))
+            end
             for i = 1:numel(files)
                 file = files{i};
+                [~,fname,fext] = fileparts(file);
+                dlg.Message = sprintf('%s\nImporting file %d of %d: %s%s', ...
+                    baseMsg, i, numel(files), fname, fext);
                 if isempty(summaryTableFile)
-                    measurement = parserInstance.run(file);
+                    [measurement,~,binvalues] = parserInstance.run(file);
                 else
-                    measurement = parserInstance.run(file, ...
-                        'SummaryTableFile',summaryTableFile);
+                    [measurement,~,binvalues] = parserInstance.run(file, ...
+                        'SummaryTableFile',summaryTableFile, ...
+                        'IgnoreC6MechanicalLimitBuckets', ...
+                        ignoreC6MechanicalLimitBuckets);
+                end
+                if isfield(binvalues,'ImportDiagnostics')
+                    diagnostics = binvalues.ImportDiagnostics;
+                    skippedMechanicalLimitBuckets = ...
+                        skippedMechanicalLimitBuckets + ...
+                        diagnostics.SkippedMechanicalLimitBuckets;
+                    skippedIncompleteSegments = skippedIncompleteSegments + ...
+                        diagnostics.SkippedIncompleteSegments;
                 end
                 importedMeasurementCount = importedMeasurementCount + ...
                     numel(measurement);
@@ -386,7 +497,11 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 'SourceFileCount',numel(files), ...
                 'MeasurementCount',importedMeasurementCount, ...
                 'SummaryMatchedRunCount', ...
-                numel(files) * ~isempty(summaryTableFile));
+                numel(files) * ~isempty(summaryTableFile), ...
+                'C6FilterEnabled',ignoreC6MechanicalLimitBuckets, ...
+                'SkippedMechanicalLimitBuckets', ...
+                skippedMechanicalLimitBuckets, ...
+                'SkippedIncompleteSegments',skippedIncompleteSegments);
         end
         function recordLastSessionMeasurementFiles(app, files)
             %RECORDLASTSESSIONMEASUREMENTFILES Append the given paths to the
@@ -464,7 +579,12 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                         'exists; measurements will be imported without it.'])
                     summaryTableFile = char.empty;
                 end
-                app.runMeasurementImport(files,parserHandle,summaryTableFile)
+                ignoreC6MechanicalLimitBuckets = ...
+                    helpers.shouldIgnoreC6Buckets(...
+                    app.Settings.LastSession.IgnoreC6MechanicalLimitBuckets, ...
+                    summaryTableFile);
+                app.runMeasurementImport(files,parserHandle,summaryTableFile, ...
+                    ignoreC6MechanicalLimitBuckets)
             catch
                 uialert(fig, 'Failed to load last measurement data!', ...
                     title, 'Icon', 'error')
@@ -509,6 +629,7 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             end
             msg = 'Export successful.';
             uialert(fig, msg, title, 'Icon', 'success')
+            app.setStatus('Measurements exported.', 'Icon', 'success')
         end
         function onClearMeasurementsRequested(app, ~, ~)
             message = 'Clear loaded measurements?';
@@ -577,24 +698,10 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             reset(app)
         end
         function onFitterSettingsChanged(app, ~, ~)
-            fitmodes = app.Settings.Fitter.FitModes;
             menus = app.SelectFitModesMenu.Children;
-            menuTexts = {menus.Text};
             set(menus, 'Checked', 'off')
-            for i = 1:numel(fitmodes)
-                fitmodeName = char(fitmodes(i));
-                I = strcmp(menuTexts, {fitmodeName});
-                menus(I).Checked = 'on';
-            end
-        end
-        function onFitterMeasurementsLoaded(app, ~, event)
-            arguments
-                app
-                ~
-                event events.FitterMeasurementsLoadedEventData
-            end
-            flagsMap = event.FitModeFlags;
-            app.TyreDataPanel.addMeasurementFitModes(flagsMap);
+            fitmodeNames = cellstr(app.Settings.Fitter.FitModes);
+            menus(ismember({menus.Text}, fitmodeNames)).Checked = 'on';
         end
         function onStartFittingRequested(app, ~, ~)
             import magicformula.FitMode
@@ -684,6 +791,7 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                     msg = 'Fitting process successful.';
                     icon = 'success';
                 end
+                statusMsg = msg; % one-line summary for the status bar
                 if ~isempty(results)
                     summary = arrayfun(@(r) sprintf( ...
                         '%s: accepted=%d, NRMSE %.4g, physical RMSE %.4g, exit %d, %d evals', ...
@@ -697,6 +805,7 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                     newline() newline() ...
                     'Details printed to logfile/console.'];
                 uialert(fig, msg, title, 'icon', icon)
+                app.setStatus(statusMsg, 'Icon', icon)
             catch ME
                 % Fall back to the last successfully fitted values so that
                 % a single failed fit does not wipe the table. If no fit
@@ -814,6 +923,10 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                     file = MagicFormulaTyreTool.dialogSaveTyreModel(model);
                     model.File = file;
             end
+            if ~isempty(model.File)
+                app.setStatus(sprintf('Saved tyre model to %s.', ...
+                    model.File), 'Icon', 'success')
+            end
         end
         function onResetTyreModelRequested(app, ~, ~)
             backupModel = app.TyreModelBackup;
@@ -829,6 +942,7 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             end
             
             app.setTyreModel(backupModel)
+            app.setStatus('Tyre model reset to last saved state.', 'Icon', 'info')
         end
         function onClearTyreModelRequested(app, ~, ~)
             model = app.TyreModel;
@@ -855,6 +969,7 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             
             model = MagicFormulaTyre.empty();
             app.setTyreModel(model)
+            app.setStatus('Tyre model cleared.', 'Icon', 'info')
         end
         function onViewMenuSelected(app, source, ~)
             viewSettings = app.Settings.View;           
@@ -898,6 +1013,7 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 case optCancel
                     return
             end
+            app.setStatus('Applied fitted parameter values.', 'Icon', 'success')
         end
         function onZeroParametersRequested(app, ~, ~)
             tyreModel = app.TyreModel;
@@ -1027,7 +1143,7 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 'Visible', 'off',...
                 'Tag', 'MainUIFigure', ...
                 'HandleVisibility', 'on', ...
-                'Color', [1 1 1], ...
+                'Color', app.Settings.Theme.FigureBackground, ...
                 'Position', position, ...
                 'Name', name, ...
                 'Icon', 'tyre_icon.png', ...
@@ -1040,9 +1156,13 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             app.GridMain = uigridlayout(app.UIFigure, ...
                 'Padding', zeros(1,4), ...
                 'RowSpacing', 0, ...
-                'RowHeight', {'1x'}, ...
+                'RowHeight', {'1x','fit'}, ...
                 'ColumnWidth', {'1x','1x'}, ...
                 'ColumnSpacing', 0);
+            app.GridMain.Layout.Row = 1;
+            app.StatusBar = ui.StatusBar(app.GridMain);
+            app.StatusBar.Layout.Row = 2;
+            app.StatusBar.Layout.Column = [1 2];
         end
         function createTabGroups(app)
             app.TabGroupPrimary = uitabgroup(app.GridMain);
@@ -1149,14 +1269,19 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             app.SelectFitModesMenu = uimenu(app.FitterMenu, ...
                 'Text', 'Select Fit-Modes', ...
                 'Separator', 'on');
-            fitmodesText = {'Fx0','Fy0','Mz0','Fx','Fy','Mx','My','Mz'};
+            [~, fitmodesText] = enumeration('magicformula.FitMode');
             fitmodesSelected = cellstr(app.Settings.Fitter.FitModes);
             for i = 1:numel(fitmodesText)
                 text = fitmodesText{i};
-                checked = any(strcmpi(text, fitmodesSelected));
-                uimenu(app.SelectFitModesMenu, 'Text', text, ...
+                checked = ismember(text, fitmodesSelected);
+                item = uimenu(app.SelectFitModesMenu, 'Text', text, ...
                     'Checked', checked, ...
                     'MenuSelectedFcn', @app.onSelectFitModesMenuSelected);
+                if strcmp(text, 'Fz')
+                    % Vertical-load fit modes are not implemented in the
+                    % Fitter yet; show disabled, as in the checkbox panel.
+                    item.Enable = false;
+                end
             end
             
             uimenu(app.FitterMenu, ...
@@ -1377,8 +1502,13 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                     warning('Failed to save settings to persistent storage.')
                 end
             end
+            %Stop the status-bar auto-clear timer before teardown so it
+            %cannot fire its TimerFcn against a half-deleted app.
+            if ~isempty(app.StatusTimer) && isvalid(app.StatusTimer)
+                stop(app.StatusTimer)
+                delete(app.StatusTimer)
+            end
             delete(app.Settings)
-            clear AppSettings
             delete(app.TyreModel)
             delete(app.TyreModelBackup)
             delete(app.TyreModelFitter)

@@ -1,3 +1,6 @@
 [submodule "src/magic-formula-tyre-library"]
 	path = src/magic-formula-tyre-library
-	url = https://github.com/teasit/magic-formula-tyre-library
+	# Upstream (teasit) is archived; the fork carries the pinned commits
+	# used by this project, so CI must fetch the submodule from there.
+	url = https://github.com/jyjh/magic-formula-tyre-library
+	branch = main

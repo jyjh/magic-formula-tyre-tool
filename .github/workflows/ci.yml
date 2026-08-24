@@ -28,6 +28,10 @@ jobs:
 
       - name: Set up MATLAB
         uses: matlab-actions/setup-matlab@v3
+        with:
+          # The v61 fitter is built on fmincon, which requires the
+          # Optimization Toolbox.
+          products: MATLAB Optimization Toolbox
         # Pin a release with e.g.: release: R2026a
 
       - name: Run tests

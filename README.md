@@ -1,8 +1,8 @@
 # Magic Formula Tyre Tool
 
 [![View Tool on File Exchange](https://www.mathworks.com/matlabcentral/images/matlab-file-exchange.svg)](https://de.mathworks.com/matlabcentral/fileexchange/111375)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/teasit/magic-formula-tyre-tool)](https://github.com/teasit/magic-formula-tyre-tool/releases/latest)
-[![GitHub downloads](https://img.shields.io/github/downloads/teasit/magic-formula-tyre-tool/total)](https://github.com/teasit/magic-formula-tyre-tool/releases/latest)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/jyjh/magic-formula-tyre-tool)](https://github.com/jyjh/magic-formula-tyre-tool/releases/latest)
+[![GitHub downloads](https://img.shields.io/github/downloads/jyjh/magic-formula-tyre-tool/total)](https://github.com/jyjh/magic-formula-tyre-tool/releases/latest)
 ![MATLAB version compatability](https://img.shields.io/badge/compatibility-%E2%89%A5R2021a-orange)
 [![MATLAB CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 
@@ -56,7 +56,7 @@ de-identified and obscured data for demonstration purposes.
 There are several ways:
 
 - Download latest Release from [MATLAB File Exchange](https://de.mathworks.com/matlabcentral/fileexchange/111375)
-- Download latest Release from [GitHub](https://github.com/teasit/magic-formula-tyre-tool/releases)
+- Download latest Release from [GitHub](https://github.com/jyjh/magic-formula-tyre-tool/releases)
 - Clone using Git and integrate into your projects using a [Project Reference](https://mathworks.com/help/simulink/ug/add-or-remove-a-reference-to-another-project.html)
 
 ## Development
@@ -71,7 +71,11 @@ buildtool package   % run tests, then build MagicFormulaTyreTool.mltbx
 
 Continuous integration ([.github/workflows/ci.yml](.github/workflows/ci.yml))
 runs the same tasks on every push and pull request and uploads the packaged
-toolbox as a workflow artifact.
+toolbox as a workflow artifact. When the tests pass on a push to `main`, CI
+additionally publishes a GitHub release with the packaged toolbox attached:
+if `src/about.json` carries a new version, the release uses it, otherwise
+the patch version is bumped past the latest `vX.Y.Z` tag so every push gets
+a fresh release.
 
 ## Usage
 

@@ -1,5 +1,7 @@
 # Continuous integration for MATLAB. The pipeline runs the app and
 # library unit tests and packages the toolbox (.mltbx) as an artifact.
+# For every push to main where tests pass, it also publishes a GitHub
+# release with the packaged toolbox attached.
 #
 # see: https://github.com/mathworks/ci-configuration-examples
 
@@ -10,6 +12,9 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -25,6 +30,10 @@ jobs:
         uses: actions/checkout@v6
         with:
           submodules: recursive
+          # Full history and tags are needed to pick the next release
+          # version from the existing vX.Y.Z tags.
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Set up MATLAB
         uses: matlab-actions/setup-matlab@v3
@@ -33,6 +42,27 @@ jobs:
           # Optimization Toolbox (underscores for multi-word names).
           products: MATLAB Optimization_Toolbox
         # Pin a release with e.g.: release: R2026a
+
+      - name: Resolve release version
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          ABOUT=$(sed -n 's/.*"Version": *"\([^"]*\)".*/\1/p' src/about.json | head -n1)
+          LATEST=$(git tag --list 'v*' --sort='-v:refname' | head -n1)
+          LATEST=${LATEST#v}
+          NEXT=$ABOUT
+          if [ -n "$LATEST" ]; then
+            LOWER=$(printf '%s\n%s\n' "$LATEST" "$ABOUT" | sort -V | head -n1)
+            if [ "$ABOUT" = "$LATEST" ] || [ "$ABOUT" = "$LOWER" ]; then
+              # about.json is already released (or behind the latest
+              # tag): bump the patch so every push gets a fresh,
+              # monotonically increasing tag.
+              IFS='.' read -r MA MI PA <<< "$LATEST"
+              NEXT="$MA.$MI.$((PA+1))"
+            fi
+          fi
+          echo "MFTT_TOOLBOX_VERSION=$NEXT" >> "$GITHUB_ENV"
+          echo "Release version: $NEXT (about.json: $ABOUT, latest tag: ${LATEST:-none})"
 
       - name: Run tests
         uses: matlab-actions/run-build@v3
@@ -43,6 +73,8 @@ jobs:
         uses: matlab-actions/run-build@v3
         with:
           tasks: package
+        env:
+          MFTT_TOOLBOX_VERSION: ${{ env.MFTT_TOOLBOX_VERSION }}
 
       - name: Upload toolbox artifact
         uses: actions/upload-artifact@v4
@@ -50,3 +82,14 @@ jobs:
           name: MagicFormulaTyreTool
           path: MagicFormulaTyreTool.mltbx
           if-no-files-found: error
+
+      # Runs only when everything above (tests + packaging) succeeded.
+      - name: Publish GitHub release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$MFTT_TOOLBOX_VERSION" MagicFormulaTyreTool.mltbx \
+            --title "v$MFTT_TOOLBOX_VERSION" \
+            --generate-notes

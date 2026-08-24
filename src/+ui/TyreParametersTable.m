@@ -161,12 +161,12 @@ classdef TyreParametersTable < matlab.ui.componentcontainer.ComponentContainer
             row = indices(i,1);
             col = indices(i,2);
 
-            styleMatches = uistyle('BackgroundColor', obj.Settings.Theme.SearchMatchHighlight);
+            styleMatches = uistyle('BackgroundColor', settings.ThemeSettings.SearchMatchHighlight);
             removeStyleFromTable(obj, obj.SearchMatchesStyle)
             addStyle(tbl, styleMatches, 'cell', indices)
             obj.SearchMatchesStyle = styleMatches;
 
-            styleSelected = uistyle('BackgroundColor', obj.Settings.Theme.SearchMatchSelected);
+            styleSelected = uistyle('BackgroundColor', settings.ThemeSettings.SearchMatchSelected);
             removeStyleFromTable(obj, obj.SearchSeletedStyle)
             addStyle(tbl, styleSelected, 'cell', [row col])
             obj.SearchSeletedStyle = styleSelected;
@@ -201,7 +201,7 @@ classdef TyreParametersTable < matlab.ui.componentcontainer.ComponentContainer
             row = indices(i,1);
             col = indices(i,2);
 
-            styleSelected = uistyle('BackgroundColor', obj.Settings.Theme.SearchMatchSelected);
+            styleSelected = uistyle('BackgroundColor', settings.ThemeSettings.SearchMatchSelected);
             removeStyleFromTable(obj, obj.SearchSeletedStyle)
             addStyle(tbl, styleSelected, 'cell', [row col])
             obj.SearchSeletedStyle = styleSelected;
@@ -275,7 +275,7 @@ classdef TyreParametersTable < matlab.ui.componentcontainer.ComponentContainer
                 removeStyleFromTable(obj, obj.FittedParamsStyle)
                 obj.FittedParamsStyle = matlab.ui.style.Style.empty;
             else
-                style = uistyle('FontColor', obj.Settings.Theme.FittedParameterFontColor);
+                style = uistyle('FontColor', settings.ThemeSettings.FittedParameterFontColor);
                 removeStyleFromTable(obj, obj.FittedParamsStyle)
                 addStyle(table, style, 'column', obj.ColumnFittedValue)
                 obj.FittedParamsStyle = style;

@@ -79,7 +79,9 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             try
                 model.saveTIR(file);
             catch sourceException
-                baseException = exceptions.CouldNotExportTIR(fileName);
+                baseException = MException(...
+                    'MagicFormulaTyreTool:CouldNotExportTIR', ...
+                    sprintf('Could not export model to "%s".', fileName));
                 baseException = addCause(baseException, sourceException);
                 throw(baseException)
             end
@@ -184,9 +186,9 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             %the floor, snap back to the floor on the offending axis only.
             fig = app.UIFigure;
             pos = fig.Position;
-            minWidth = app.Settings.Layout.DefaultButtonWidthTextIcon ...
-                * 4 + app.Settings.Layout.DefaultColumnSpacing * 5;
-            minHeight = app.Settings.Layout.DefaultButtonHeight * 6;
+            minWidth = settings.LayoutSettings.DefaultButtonWidthTextIcon ...
+                * 4 + settings.LayoutSettings.DefaultColumnSpacing * 5;
+            minHeight = settings.LayoutSettings.DefaultButtonHeight * 6;
             changed = false;
             if pos(3) < minWidth
                 pos(3) = minWidth;
@@ -220,13 +222,13 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             %Map friendly icon names to the available svg files. Only
             %error/info have dedicated icons in assets/icons/fontawesome;
             %success/warning fall back to text-only (no icon).
-            iconMap = containers.Map(...
-                {'error','info'}, ...
-                {'circle-xmark-solid.svg','circle-info-solid.svg'});
-            if isKey(iconMap, icon)
-                icon = iconMap(icon);
-            elseif any(strcmp(icon, {'success','warning'}))
-                icon = char.empty;
+            switch icon
+                case 'error'
+                    icon = 'circle-xmark-solid.svg';
+                case 'info'
+                    icon = 'circle-info-solid.svg';
+                case {'success', 'warning'}
+                    icon = char.empty;
             end
             bar = app.StatusBar;
             bar.Text = message;
@@ -336,7 +338,9 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 app.setStatus(sprintf('Loaded tyre model from %s.', fileName), ...
                     'Icon', 'success')
             catch cause
-                exception = exceptions.CouldNotImportTIR(fileName);
+                exception = MException(...
+                    'MagicFormulaTyreTool:CouldNotImportTIR', ...
+                    sprintf('Could not import TIR file "%s".', fileName));
                 exception = addCause(exception, cause);
                 throw(exception)
             end
@@ -411,8 +415,10 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 end
                 uialert(fig, msg, title, 'Icon', 'error')
 
-                exception = exceptions.CouldNotImportTYDEX();
-                exception = exception.addCause(cause);
+                exception = MException(...
+                    'MagicFormulaTyreTool:CouldNotImportTYDEX', ...
+                    'Could not import measurements from selected file(s).');
+                exception = addCause(exception, cause);
                 throw(exception)
             end
         end
@@ -623,8 +629,10 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 msg = 'Export failed. See console/logfile for details';
                 uialert(fig, msg, title, 'Icon', 'error')
                 
-                exception = exceptions.CouldNotExportTYDEX();
-                exception = exception.addCause(cause);
+                exception = MException(...
+                    'MagicFormulaTyreTool:CouldNotExportTYDEX', ...
+                    'Could not export measurements to selected folder.');
+                exception = addCause(exception, cause);
                 throw(exception)
             end
             msg = 'Export successful.';
@@ -887,8 +895,13 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             if isempty(file)
                 return
             end
-            app.setTyreModel(modelNew)
+            %Assign the file BEFORE setTyreModel so the working copy and
+            %the last-session memory both record it; setTyreModel stores
+            %a copy as the working model and the original as backup.
             modelNew.File = file;
+            app.setTyreModel(modelNew)
+            app.setStatus(sprintf('Saved tyre model to %s.', file), ...
+                'Icon', 'success')
         end
         function onSaveTyreModelRequested(app, ~, ~)
             model = app.TyreModel;
@@ -898,13 +911,20 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             
             file = model.File;
             if isempty(file)
-                app.setTyreModel(model)
-                model = app.TyreModel;
+                %Model was never saved: ask where to save it. Do not
+                %touch the backup here; cancelling the dialog must leave
+                %the last-saved state intact.
                 file = MagicFormulaTyreTool.dialogSaveTyreModel(model);
+                if isempty(file)
+                    return
+                end
                 model.File = file;
+                app.Settings.LastSession.TyreModelFile = file;
+                app.setStatus(sprintf('Saved tyre model to %s.', file), ...
+                    'Icon', 'success')
                 return
             end
-            
+
             optOverwrite = 'Overwrite';
             optNew = 'Save as...';
             optCancel = 'Cancel';
@@ -913,7 +933,7 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
             title = 'Save Tyre Model';
             selection = uiconfirm(app.UIFigure, message, title, ...
                 'Options', options, 'Icon', 'warning');
-            
+
             switch selection
                 case optCancel
                     return
@@ -921,7 +941,11 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                     model.saveTIR(file);
                 case optNew
                     file = MagicFormulaTyreTool.dialogSaveTyreModel(model);
+                    if isempty(file)
+                        return
+                    end
                     model.File = file;
+                    app.Settings.LastSession.TyreModelFile = file;
             end
             if ~isempty(model.File)
                 app.setStatus(sprintf('Saved tyre model to %s.', ...
@@ -1143,7 +1167,7 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 'Visible', 'off',...
                 'Tag', 'MainUIFigure', ...
                 'HandleVisibility', 'on', ...
-                'Color', app.Settings.Theme.FigureBackground, ...
+                'Color', settings.ThemeSettings.FigureBackground, ...
                 'Position', position, ...
                 'Name', name, ...
                 'Icon', 'tyre_icon.png', ...

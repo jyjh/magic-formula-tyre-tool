@@ -13,6 +13,11 @@ classdef FrictionEllipseAxes < matlab.ui.componentcontainer.ComponentContainer
     end
     methods
         function refresh(obj)
+            %REFRESH Redraw the ellipse. Public redraw entry point for
+            %host components; no-op without a model, mirroring update().
+            if isempty(obj.Model)
+                return
+            end
             updateAxes(obj)
         end
     end

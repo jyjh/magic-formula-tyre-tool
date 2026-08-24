@@ -11,9 +11,6 @@ classdef HelpHint < matlab.ui.componentcontainer.ComponentContainer
     properties (Access = private)
         Image matlab.ui.control.Image
     end
-    
-    properties (Access = private, Transient, NonCopyable)
-    end
     methods (Access = protected)
         function setup(obj)
             s = settings.LayoutSettings();

@@ -1,6 +1,6 @@
-classdef TextSettings < settings.AbstractSettings
+classdef TextSettings
     %TEXTSETTINGS Contains app settings for text (e.g. panel fonts)
-    properties (Constant, AbortSet)
+    properties (Constant)
         FontWeightPanel = 'bold'
         FontNamePanel = 'Helvetica'
     end

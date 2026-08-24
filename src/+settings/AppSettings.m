@@ -1,10 +1,7 @@
 classdef AppSettings < settings.AbstractSettings
     %APPSETTINGS Loads app settings from and saves them to persistent storage.
     properties (SetObservable, AbortSet)
-        Layout settings.LayoutSettings
         Fitter settings.FitterSettings
-        Text   settings.TextSettings
-        Theme settings.ThemeSettings
         View settings.ViewSettings
         LastSession settings.LastSessionSettings
         Version char
@@ -15,7 +12,8 @@ classdef AppSettings < settings.AbstractSettings
                 settingsGroup = settings().(obj.SettingsGroupTopLevel);
                 load@settings.AbstractSettings(obj, settingsGroup)
             catch ME
-                E = exceptions.CouldNotLoadAppSettings();
+                E = MException('MagicFormulaTyreTool:CouldNotLoadAppSettings', ...
+                    'Could not load persistent app settings.');
                 E = addCause(E, ME);
                 throw(E)
             end
@@ -29,7 +27,8 @@ classdef AppSettings < settings.AbstractSettings
                 settingsGroup = settings().(obj.SettingsGroupTopLevel);
                 save@settings.AbstractSettings(obj, settingsGroup)
             catch ME
-                E = exceptions.CouldNotSaveAppSettings();
+                E = MException('MagicFormulaTyreTool:CouldNotSaveAppSettings', ...
+                    'Could not save persistent app settings.');
                 E = addCause(E, ME);
                 throw(E)
             end
@@ -53,7 +52,8 @@ classdef AppSettings < settings.AbstractSettings
                     obj.save()
                 end
             catch ME
-                E = exceptions.CouldNotInitAppSettings();
+                E = MException('MagicFormulaTyreTool:CouldNotInitAppSettings', ...
+                    'Could not initialize persistent app settings.');
                 E = addCause(E, ME);
                 throw(E)
             end
@@ -64,7 +64,8 @@ classdef AppSettings < settings.AbstractSettings
                 init(obj)
                 save(obj)
             catch ME
-                E = exceptions.CouldNotResetAppSettings();
+                E = MException('MagicFormulaTyreTool:CouldNotResetAppSettings', ...
+                    'Could not reset persistent app settings.');
                 E = addCause(E, ME);
                 throw(E)
             end
@@ -80,19 +81,6 @@ classdef AppSettings < settings.AbstractSettings
                 pobj = obj;
             else
                 obj = pobj;
-            end
-        end
-        function delete(obj)
-            %Delete every settings child that defines a destructor; not
-            %all AbstractSettings subclasses have one, so check first.
-            props = metaclass(obj).PropertyList;
-            for i = 1:numel(props)
-                name = props(i).Name;
-                child = obj.(name);
-                if isa(child, 'settings.AbstractSettings') ...
-                        && ismethod(child, 'delete')
-                    delete(child)
-                end
             end
         end
     end
@@ -117,4 +105,3 @@ classdef AppSettings < settings.AbstractSettings
         end
     end
 end
-

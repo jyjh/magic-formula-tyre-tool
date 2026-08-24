@@ -1,6 +1,6 @@
-classdef LayoutSettings < settings.AbstractSettings
+classdef LayoutSettings
     %LAYOUTSETTINGS Contains app settings for layout (e.g. default padding)
-    properties (Constant, AbortSet)
+    properties (Constant)
         DefaultPadding double = 5*ones(1,4);
         DefaultButtonHeight double = 22
         DefaultButtonWidthTextIcon = 110

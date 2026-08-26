@@ -47,9 +47,9 @@ function testTask(task) %#ok<INUSD>
 end
 
 function packageTask(task) %#ok<INUSD>
-    %Build MagicFormulaTyreTool.mltbx. buildToolbox.m is a script that
-    %packages from the current folder; buildtool tasks run with the plan
-    %folder as current folder.
+    %Build MagicFormulaTyreTool.mltbx. buildToolbox stages the runtime
+    %payload in a temporary folder and packages from there; it uses the
+    %plan folder (repository root) as the source root.
     buildToolbox();
     if ~isfile('MagicFormulaTyreTool.mltbx')
         error('MagicFormulaTyreTool:packageFailed', ...

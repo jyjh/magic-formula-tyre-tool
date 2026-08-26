@@ -1,0 +1,58 @@
+# TEMPORARY diagnostic workflow (branch-only): install the published
+# release .mltbx and upstream's known-good .mltbx with licensed CI MATLAB
+# to capture the exact installation error users report.
+
+name: Install repro
+
+on:
+  push:
+    branches: [ci-debug/install-repro]
+  workflow_dispatch:
+
+jobs:
+  install:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        release: [latest, R2021a]
+    steps:
+      - name: Set up MATLAB ${{ matrix.release }}
+        uses: matlab-actions/setup-matlab@v3
+        with:
+          release: ${{ matrix.release }}
+
+      - name: Download toolbox files
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v1.5.2 --repo jyjh/magic-formula-tyre-tool \
+            --pattern '*.mltbx' --output release.mltbx
+          gh release download v1.5.1 --repo teasit/magic-formula-tyre-tool \
+            --pattern '*.mltbx' --output upstream.mltbx
+
+      - name: Try installing release and upstream toolboxes
+        uses: matlab-actions/run-command@v3
+        with:
+          command: |
+            fprintf('MATLAB %s\n', version);
+            try
+                T = matlab.addons.toolbox.installToolbox('release.mltbx', true);
+                fprintf('RELEASE_INSTALL_OK name=%s version=%s guid=%s\n', T.Name, T.Version, T.Guid);
+            catch e
+                fprintf('RELEASE_INSTALL_FAILED\n');
+                disp(getReport(e, 'extended', 'hyperlinks', 'off'))
+            end
+            try
+                U = matlab.addons.toolbox.installToolbox('upstream.mltbx', true);
+                fprintf('UPSTREAM_INSTALL_OK name=%s version=%s guid=%s\n', U.Name, U.Version, U.Guid);
+            catch e
+                fprintf('UPSTREAM_INSTALL_FAILED\n');
+                disp(getReport(e, 'extended', 'hyperlinks', 'off'))
+            end
+            disp('--- installedToolboxes:')
+            inst = matlab.addons.toolbox.installedToolboxes;
+            for i = 1:numel(inst)
+                fprintf('  %s %s %s\n', inst(i).Name, inst(i).Version, inst(i).Guid);
+            end

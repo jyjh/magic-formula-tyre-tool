@@ -1,0 +1,40 @@
+# TEMPORARY final check (branch-only): install the published v1.5.3
+# release asset and confirm app/library resolution.
+
+name: Verify released install
+
+on:
+  push:
+    branches: [ci-debug/verify-fix]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - name: Set up MATLAB
+        uses: matlab-actions/setup-matlab@v3
+
+      - name: Download released toolbox
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v1.5.3 --repo jyjh/magic-formula-tyre-tool \
+            --pattern '*.mltbx' --output release.mltbx
+
+      - name: Install released toolbox and check runtime resolution
+        uses: matlab-actions/run-command@v3
+        with:
+          command: |
+            U = matlab.addons.toolbox.installToolbox('release.mltbx', true);
+            disp('TOOLBOX_INSTALL_OK'); disp(U)
+            T = matlab.addons.install("release.mltbx", true);
+            disp('ADDONS_INSTALL_OK'); disp(T)
+            fprintf('app entry: %s\n', which('MagicFormulaTyreTool'));
+            fprintf('library class: %s\n', which('tydex.Measurement'));
+            fprintf('fit mode class: %s\n', which('magicformula.FitMode'));
+            fprintf('icons on path: %d\n', ~isempty(which('assets/icons/fontawesome/gear-solid.svg')));
+            about = jsondecode(fileread('about.json'));
+            fprintf('packaged version: %s\n', about.Version);
+            assert(strcmp(about.Version, '1.5.3'), 'unexpected packaged version')

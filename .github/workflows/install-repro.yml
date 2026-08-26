@@ -37,18 +37,21 @@ jobs:
         with:
           command: |
             fprintf('MATLAB %s\n', version);
+            fprintf('MPMCommonArch feature: %d\n', matlab.internal.feature('MPMCommonArch'));
             try
-                T = matlab.addons.toolbox.installToolbox('release.mltbx', true);
-                fprintf('RELEASE_INSTALL_OK name=%s version=%s guid=%s\n', T.Name, T.Version, T.Guid);
+                T = matlab.addons.install("release.mltbx", true);
+                fprintf('RELEASE_ADDONS_INSTALL_OK\n');
+                disp(T)
             catch e
-                fprintf('RELEASE_INSTALL_FAILED\n');
+                fprintf('RELEASE_ADDONS_INSTALL_FAILED\n');
                 disp(getReport(e, 'extended', 'hyperlinks', 'off'))
             end
             try
-                U = matlab.addons.toolbox.installToolbox('upstream.mltbx', true);
-                fprintf('UPSTREAM_INSTALL_OK name=%s version=%s guid=%s\n', U.Name, U.Version, U.Guid);
+                U = matlab.addons.install("upstream.mltbx", true);
+                fprintf('UPSTREAM_ADDONS_INSTALL_OK\n');
+                disp(U)
             catch e
-                fprintf('UPSTREAM_INSTALL_FAILED\n');
+                fprintf('UPSTREAM_ADDONS_INSTALL_FAILED\n');
                 disp(getReport(e, 'extended', 'hyperlinks', 'off'))
             end
             disp('--- installedToolboxes:')

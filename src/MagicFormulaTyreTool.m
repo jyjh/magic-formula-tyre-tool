@@ -1183,16 +1183,19 @@ classdef (Sealed) MagicFormulaTyreTool < matlab.apps.AppBase
                 'RowHeight', {'1x','fit'}, ...
                 'ColumnWidth', {'1x','1x'}, ...
                 'ColumnSpacing', 0);
-            app.GridMain.Layout.Row = 1;
             app.StatusBar = ui.StatusBar(app.GridMain);
             app.StatusBar.Layout.Row = 2;
             app.StatusBar.Layout.Column = [1 2];
         end
         function createTabGroups(app)
             app.TabGroupPrimary = uitabgroup(app.GridMain);
-            s = app.Settings; 
+            app.TabGroupPrimary.Layout.Row = 1;
+            app.TabGroupPrimary.Layout.Column = 1;
+            s = app.Settings;
             if s.View.Layout.MoveAnalysisPanelToSecondaryTabGroup
                 app.TabGroupSecondary = uitabgroup(app.GridMain);
+                app.TabGroupSecondary.Layout.Row = 1;
+                app.TabGroupSecondary.Layout.Column = 2;
             else
                 app.TabGroupPrimary.Layout.Column = [1 2];
             end
